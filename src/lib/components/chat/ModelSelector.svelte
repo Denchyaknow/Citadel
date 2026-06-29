@@ -1,11 +1,17 @@
 <script lang="ts">
-	import { models, showSettings, settings, user, mobile, config } from '$lib/stores';
+	import { models, showSettings, settings, user, mobile, config, type Model } from '$lib/stores';
 	import { onMount, tick, getContext } from 'svelte';
 	import { toast } from 'svelte-sonner';
 	import Selector from './ModelSelector/Selector.svelte';
 	import Tooltip from '../common/Tooltip.svelte';
 
 	import { updateUserSettings } from '$lib/apis/users';
+	import {
+		buildHermesModelId,
+		getHermesFallbackFromModelId,
+		getHermesProfileFromModelId,
+		isHermesModelId
+	} from '$lib/apis/hermes';
 	import equal from 'fast-deep-equal';
 	const i18n = getContext('i18n');
 
@@ -13,6 +19,57 @@
 	export let disabled = false;
 
 	export let showSetDefault = true;
+
+	type HermesFallback = {
+		id: string;
+		name?: string;
+		label?: string;
+		provider?: string | null;
+	};
+
+	type HermesModel = Omit<Model, 'owned_by'> & {
+		owned_by?: string;
+		hermes?: {
+			profile?: string;
+			active?: boolean;
+			fallbacks?: HermesFallback[];
+		};
+	};
+
+	$: hermesProfileModels = ($models as unknown as HermesModel[]).filter(
+		(model) => model?.owned_by === 'hermes'
+	);
+	$: hermesMode = hermesProfileModels.length > 0;
+	$: selectedHermesProfile = getHermesProfileFromModelId(selectedModels?.[0]);
+	$: selectedHermesProfileModel = hermesProfileModels.find(
+		(model) => model?.hermes?.profile === selectedHermesProfile
+	);
+	$: selectedHermesFallback = getHermesFallbackFromModelId(selectedModels?.[0]);
+	$: selectedHermesFallbacks = selectedHermesProfileModel?.hermes?.fallbacks ?? [];
+	$: if (hermesMode && !isHermesModelId(selectedModels?.[0])) {
+		const activeProfileModel = hermesProfileModels.find((model) => model?.hermes?.active);
+		const nextModel = activeProfileModel ?? hermesProfileModels[0];
+		if (nextModel) {
+			queueMicrotask(() => {
+				selectedModels = [nextModel.id];
+			});
+		}
+	}
+
+	const setHermesProfile = (modelId: string) => {
+		const profile = getHermesProfileFromModelId(modelId);
+		const profileModel = hermesProfileModels.find((model) => model?.hermes?.profile === profile);
+		const fallbacks = profileModel?.hermes?.fallbacks ?? [];
+		const currentFallback = getHermesFallbackFromModelId(selectedModels?.[0]);
+		const nextFallback = fallbacks.some((fallback: HermesFallback) => fallback.id === currentFallback)
+			? currentFallback
+			: '';
+		selectedModels = [buildHermesModelId(profile, nextFallback)];
+	};
+
+	const setHermesFallback = (fallbackModelId: string) => {
+		selectedModels = [buildHermesModelId(selectedHermesProfile, fallbackModelId)];
+	};
 
 	const saveDefaultModel = async () => {
 		const hasEmptyModel = selectedModels.filter((it) => it === '');
@@ -26,8 +83,8 @@
 		toast.success($i18n.t('Default model updated'));
 	};
 
-	const pinModelHandler = async (modelId) => {
-		let pinnedModels = $settings?.pinnedModels ?? [];
+	const pinModelHandler = async (modelId: string) => {
+		let pinnedModels: string[] = [...(($settings?.pinnedModels as string[] | undefined) ?? [])];
 
 		if (pinnedModels.includes(modelId)) {
 			pinnedModels = pinnedModels.filter((id) => id !== modelId);
@@ -35,13 +92,13 @@
 			pinnedModels = [...new Set([...pinnedModels, modelId])];
 		}
 
-		settings.set({ ...$settings, pinnedModels: pinnedModels });
+		settings.set({ ...($settings as any), pinnedModels: pinnedModels });
 		await updateUserSettings(localStorage.token, { ui: $settings });
 	};
 
 	$: if (selectedModels.length > 0 && $models.length > 0) {
 		const _selectedModels = selectedModels.map((model) =>
-			$models.map((m) => m.id).includes(model) ? model : ''
+			$models.map((m) => m.id).includes(model) || isHermesModelId(model) ? model : ''
 		);
 
 		if (!equal(_selectedModels, selectedModels)) {
@@ -51,6 +108,57 @@
 </script>
 
 <div class="flex flex-col w-full items-start">
+	{#if hermesMode}
+		<div class="flex w-full max-w-fit items-center gap-1">
+			<div class="overflow-hidden w-full">
+				<div class="max-w-full {($settings?.highContrastMode ?? false) ? 'm-1' : 'mr-1'}">
+					<Selector
+						id="hermes-profile"
+						placeholder="Select a Hermes profile"
+						items={hermesProfileModels.map((model) => ({
+							value: model.id,
+							label: model.name,
+							model: model
+						}))}
+						{pinModelHandler}
+						value={selectedHermesProfileModel?.id ?? selectedModels?.[0] ?? ''}
+						onChange={setHermesProfile}
+					/>
+				</div>
+			</div>
+
+			{#if selectedHermesFallbacks.length > 0}
+				<div class="overflow-hidden w-full min-w-[13rem]">
+					<div class="max-w-full {($settings?.highContrastMode ?? false) ? 'm-1' : 'mr-1'}">
+						<Selector
+							id="hermes-fallback"
+							placeholder="Default model"
+							items={[
+								{
+									value: '',
+									label: 'Default model',
+									model: selectedHermesProfileModel
+								},
+								...selectedHermesFallbacks.map((fallback: HermesFallback) => ({
+									value: fallback.id,
+									label: fallback.name ?? fallback.id,
+									model: {
+										...selectedHermesProfileModel,
+										id: fallback.id,
+										name: fallback.name ?? fallback.id,
+										tags: [{ name: fallback.label ?? 'Fallback' }]
+									}
+								}))
+							]}
+							value={selectedHermesFallback}
+							onChange={setHermesFallback}
+							searchEnabled={false}
+						/>
+					</div>
+				</div>
+			{/if}
+		</div>
+	{:else}
 	{#each selectedModels as selectedModel, selectedModelIdx}
 		<div class="flex w-full max-w-fit">
 			<div class="overflow-hidden w-full">
@@ -126,6 +234,7 @@
 			{/if}
 		</div>
 	{/each}
+	{/if}
 </div>
 
 {#if showSetDefault}

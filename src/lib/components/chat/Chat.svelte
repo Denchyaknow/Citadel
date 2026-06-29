@@ -114,6 +114,7 @@
 	import Sidebar from '../icons/Sidebar.svelte';
 	import Image from '../common/Image.svelte';
 	import { getBanners } from '$lib/apis/configs';
+	import { getHermesProfileFromModelId, isHermesModelId } from '$lib/apis/hermes';
 
 	export let chatIdProp = '';
 
@@ -183,6 +184,22 @@
 	let chatFiles = [];
 	let files = [];
 	let params = {};
+
+	const resolveSelectedModel = (modelId: string) => {
+		const model = $models.find((m) => m.id === modelId);
+		if (model || !isHermesModelId(modelId)) {
+			return model;
+		}
+		const profile = getHermesProfileFromModelId(modelId);
+		return $models.find((m) => m.id === `hermes:${profile}`);
+	};
+
+	const isAvailableModelId = (modelId: string, availableModelIds: string[] | null = null) => {
+		if ((availableModelIds ?? $models.map((m) => m.id)).includes(modelId)) {
+			return true;
+		}
+		return isHermesModelId(modelId) && !!resolveSelectedModel(modelId);
+	};
 
 	$: if (chatIdProp) {
 		navigateHandler();
@@ -1207,9 +1224,7 @@
 			}
 
 			// Unavailable models filtering
-			selectedModels = selectedModels.filter((modelId) =>
-				$models.map((m) => m.id).includes(modelId)
-			);
+			selectedModels = selectedModels.filter((modelId) => isAvailableModelId(modelId));
 		} else {
 			if ($selectedFolder?.data?.model_ids) {
 				// Set from folder model IDs
@@ -1231,14 +1246,16 @@
 			}
 
 			// Unavailable & hidden models filtering
-			selectedModels = selectedModels.filter((modelId) => availableModels.includes(modelId));
+			selectedModels = selectedModels.filter((modelId) => isAvailableModelId(modelId, availableModels));
 		}
 
 		// Ensure at least one model is selected
 		if (selectedModels.length === 0 || (selectedModels.length === 1 && selectedModels[0] === '')) {
 			if (availableModels.length > 0) {
 				if (defaultModels && defaultModels.length > 0) {
-					selectedModels = defaultModels.filter((modelId) => availableModels.includes(modelId));
+					selectedModels = defaultModels.filter((modelId) =>
+						isAvailableModelId(modelId, availableModels)
+					);
 				}
 
 				if (
@@ -1379,7 +1396,7 @@
 		}
 
 		selectedModels = selectedModels.map((modelId) =>
-			$models.map((m) => m.id).includes(modelId) ? modelId : ''
+			isAvailableModelId(modelId) ? modelId : ''
 		);
 
 		const chatInput = document.getElementById('chat-input');
@@ -1577,7 +1594,7 @@
 				...(m.sources ? { sources: m.sources } : {})
 			})),
 			...(event ? { event: event } : {}),
-			model_item: $models.find((m) => m.id === modelId),
+			model_item: resolveSelectedModel(modelId),
 			chat_id: _chatId,
 			session_id: $socket?.id,
 			id: responseMessageId
@@ -1632,7 +1649,7 @@
 			toast.error($i18n.t('Model not selected'));
 		} else {
 			const modelId = selectedModels[0];
-			const model = $models.filter((m) => m.id === modelId).at(0);
+			const model = resolveSelectedModel(modelId);
 
 			if (!model) {
 				toast.error($i18n.t('Model not found'));
@@ -1692,7 +1709,7 @@
 	};
 
 	const addMessages = async ({ modelId, parentId, messages }) => {
-		const model = $models.filter((m) => m.id === modelId).at(0);
+		const model = resolveSelectedModel(modelId);
 
 		let parentMessage = history.messages[parentId];
 		let currentParentId = parentMessage ? parentMessage.id : null;
@@ -1981,7 +1998,7 @@
 		console.log('submitHandler', userPrompt, $chatId);
 
 		const _selectedModels = selectedModels.map((modelId) =>
-			$models.map((m) => m.id).includes(modelId) ? modelId : ''
+			isAvailableModelId(modelId) ? modelId : ''
 		);
 
 		if (!equal(selectedModels, _selectedModels)) {
@@ -2102,7 +2119,7 @@
 		// Build message_ids map: {model_id: assistant_message_id}
 		const messageIdsMap: Record<string, string> = {};
 		for (const [_modelIdx, modelId] of selectedModelIds.entries()) {
-			const model = $models.filter((m) => m.id === modelId).at(0);
+			const model = resolveSelectedModel(modelId);
 
 			if (model) {
 				let responseMessageId = uuidv4();
@@ -2435,7 +2452,7 @@
 			localStorage.token,
 			{
 				stream: stream,
-				model: model.id,
+				model: modelId,
 				...(messages.length > 0 ? { messages } : {}),
 				params: {
 					...$settings?.params,
@@ -2464,11 +2481,25 @@
 						$user?.email
 					)
 				},
-				model_item: $models.find((m) => m.id === model.id),
+				model_item: resolveSelectedModel(modelId),
 
 				session_id: $socket?.id,
 				chat_id: _chatId || undefined,
 				folder_id: $selectedFolder?.id ?? undefined,
+				metadata: {
+					citadel_user: $user
+						? {
+								id: $user.id,
+								name: $user.name,
+								email: $user.email,
+								role: $user.role
+							}
+						: null,
+					workspace: {
+						folder_id: $selectedFolder?.id ?? null,
+						folder_name: $selectedFolder?.name ?? null
+					}
+				},
 
 				id: responseMessageId,
 				...(messageIdsMap ? { message_ids: messageIdsMap } : {}),

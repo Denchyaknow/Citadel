@@ -39,7 +39,11 @@ from open_webui.utils.response import (
     convert_response_ollama_to_openai,
     convert_streaming_response_ollama_to_openai,
 )
-from open_webui.utils.hermes import generate_hermes_chat_completion, is_hermes_model_id
+from open_webui.utils.hermes import (
+    generate_hermes_chat_completion,
+    hermes_profile_from_model,
+    is_hermes_model_id,
+)
 from starlette.responses import JSONResponse, Response, StreamingResponse
 
 logging.basicConfig(stream=sys.stdout, level=GLOBAL_LOG_LEVEL)
@@ -189,10 +193,15 @@ async def generate_chat_completion(
         models = request.app.state.MODELS
 
     model_id = form_data['model']
-    if model_id not in models:
+    lookup_model_id = (
+        f'hermes:{hermes_profile_from_model(model_id)}'
+        if is_hermes_model_id(model_id) and model_id not in models
+        else model_id
+    )
+    if lookup_model_id not in models:
         raise Exception('Model not found')
 
-    model = models[model_id]
+    model = models[lookup_model_id]
 
     if getattr(request.state, 'direct', False) and model_id == getattr(request.state, 'model', {}).get('id'):
         return await generate_direct_chat_completion(request, form_data, user=user, models=models)
@@ -323,10 +332,15 @@ async def chat_completed(request: Request, form_data: dict, user: Any):
         raise Exception('Missing message id')
 
     model_id = data['model']
-    if model_id not in models:
+    lookup_model_id = (
+        f'hermes:{hermes_profile_from_model(model_id)}'
+        if is_hermes_model_id(model_id) and model_id not in models
+        else model_id
+    )
+    if lookup_model_id not in models:
         raise Exception('Model not found')
 
-    model = models[model_id]
+    model = models[lookup_model_id]
 
     try:
         data = await process_pipeline_outlet_filter(request, data, user, models)

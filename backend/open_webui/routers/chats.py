@@ -33,6 +33,7 @@ from open_webui.socket.main import get_event_emitter
 from open_webui.tasks import stop_item_tasks
 from open_webui.utils.access_control import filter_allowed_access_grants, has_permission
 from open_webui.utils.auth import get_admin_user, get_verified_user
+from open_webui.utils.hermes import hydrate_hermes_chat, sync_hermes_sessions_to_chats
 from open_webui.utils.middleware import serialize_output
 from open_webui.utils.misc import get_message_list
 from pydantic import BaseModel
@@ -59,6 +60,11 @@ async def get_session_user_chat_list(
     db: AsyncSession = Depends(get_async_session),
 ):
     try:
+        try:
+            await sync_hermes_sessions_to_chats(user, db=db)
+        except Exception:
+            log.debug('Hermes session sync failed while loading chat list', exc_info=True)
+
         if page is not None:
             limit = 60
             skip = (page - 1) * limit
@@ -952,6 +958,7 @@ async def get_chat_by_id(id: str, user=Depends(get_verified_user), db: AsyncSess
                 chat = await Chats.get_chat_by_id(id, db=db)
 
     if chat:
+        chat = await hydrate_hermes_chat(chat, user, db=db)
         return ChatResponse(**chat.model_dump())
 
     raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail=ERROR_MESSAGES.NOT_FOUND)

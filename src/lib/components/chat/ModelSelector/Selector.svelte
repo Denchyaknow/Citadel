@@ -59,6 +59,13 @@
 	export let triggerClassName = 'text-lg';
 
 	export let pinModelHandler: (modelId: string) => void = () => {};
+	export let onChange: (value: string) => void = () => {};
+
+	const selectValue = (nextValue: string) => {
+		value = nextValue;
+		onChange(nextValue);
+		show = false;
+	};
 
 	let tagsContainerElement;
 
@@ -222,7 +229,8 @@
 	$: if (
 		selectedTag !== undefined ||
 		selectedConnectionType !== undefined ||
-		searchValue !== undefined
+		searchValue !== undefined ||
+		items !== undefined
 	) {
 		resetView();
 	}
@@ -568,8 +576,7 @@
 								aria-label={$i18n.t('Search In Models')}
 								on:keydown={(e) => {
 									if (e.code === 'Enter' && filteredItems.length > 0) {
-										value = filteredItems[selectedModelIdx].value;
-										show = false;
+										selectValue(filteredItems[selectedModelIdx].value);
 										return; // dont need to scroll on selection
 									} else if (e.code === 'ArrowDown') {
 										e.stopPropagation();
@@ -743,10 +750,8 @@
 										{unloadModelHandler}
 										{deleteModelHandler}
 										onClick={() => {
-											value = item.value;
+											selectValue(item.value);
 											selectedModelIdx = index;
-
-											show = false;
 										}}
 									/>
 								{/each}
