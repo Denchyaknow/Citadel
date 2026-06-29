@@ -10,6 +10,7 @@
 	import Switch from '$lib/components/common/Switch.svelte';
 	import Textarea from '$lib/components/common/Textarea.svelte';
 	import Spinner from '$lib/components/common/Spinner.svelte';
+	import { getModelDisplayName } from '$lib/utils/modelImages';
 
 	const dispatch = createEventDispatcher();
 
@@ -158,7 +159,7 @@
 							<option value="" selected>{$i18n.t('Current Model')}</option>
 							{#each models as model}
 								<option value={model.id} class="bg-gray-100 dark:bg-gray-700">
-									{model.name}
+									{getModelDisplayName(model)}
 									{model?.connection_type === 'local' ? `(${$i18n.t('Local')})` : ''}
 								</option>
 							{/each}
@@ -201,7 +202,7 @@
 							<option value="" selected>{$i18n.t('Current Model')}</option>
 							{#each models as model}
 								<option value={model.id} class="bg-gray-100 dark:bg-gray-700">
-									{model.name}
+									{getModelDisplayName(model)}
 									{model?.connection_type === 'local' ? `(${$i18n.t('Local')})` : ''}
 								</option>
 							{/each}

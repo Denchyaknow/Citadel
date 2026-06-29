@@ -7,6 +7,7 @@
 	import { WEBUI_BASE_URL } from '$lib/constants';
 	import { WEBUI_NAME, config, user, models, settings, showSidebar } from '$lib/stores';
 	import { chatCompletion } from '$lib/apis/openai';
+	import { getModelDisplayName } from '$lib/utils/modelImages';
 
 	import { splitStream } from '$lib/utils';
 	import Spinner from '$lib/components/common/Spinner.svelte';
@@ -146,7 +147,9 @@
 						bind:value={selectedModelId}
 					>
 						{#each $models as model}
-							<option value={model.id} class="bg-gray-50 dark:bg-gray-700">{model.name}</option>
+							<option value={model.id} class="bg-gray-50 dark:bg-gray-700"
+								>{getModelDisplayName(model)}</option
+							>
 						{/each}
 					</select>
 				</div>

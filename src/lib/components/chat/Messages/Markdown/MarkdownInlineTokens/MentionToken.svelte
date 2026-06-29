@@ -6,6 +6,7 @@
 
 	import { goto } from '$app/navigation';
 	import { channels, models } from '$lib/stores';
+	import { getModelDisplayName } from '$lib/utils/modelImages';
 	import UserStatus from '$lib/components/channel/Messages/Message/UserStatus.svelte';
 	import UserStatusLinkPreview from '$lib/components/channel/Messages/Message/UserStatusLinkPreview.svelte';
 
@@ -72,7 +73,7 @@
 				// Model
 				const model = $models.find((m) => m.id === id);
 				if (model) {
-					label = model.name;
+					label = getModelDisplayName(model);
 				} else {
 					label = $i18n.t('Unknown');
 				}

@@ -18,6 +18,7 @@
 	import Switch from '$lib/components/common/Switch.svelte';
 	import Tooltip from '$lib/components/common/Tooltip.svelte';
 	import Textarea from '$lib/components/common/Textarea.svelte';
+	import { getModelDisplayName } from '$lib/utils/modelImages';
 	import CodeEditorModal from '$lib/components/common/CodeEditorModal.svelte';
 	const dispatch = createEventDispatcher();
 
@@ -331,7 +332,7 @@
 
 									<datalist id="model-list">
 										{#each models ?? [] as model}
-											<option value={model.id}>{model.name}</option>
+											<option value={model.id}>{getModelDisplayName(model)}</option>
 										{/each}
 									</datalist>
 								</Tooltip>
@@ -915,7 +916,7 @@
 
 									<datalist id="model-list">
 										{#each models ?? [] as model}
-											<option value={model.id}>{model.name}</option>
+											<option value={model.id}>{getModelDisplayName(model)}</option>
 										{/each}
 									</datalist>
 								</Tooltip>

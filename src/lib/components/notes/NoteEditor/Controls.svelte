@@ -4,6 +4,7 @@
 
 	import XMark from '$lib/components/icons/XMark.svelte';
 	import { models } from '$lib/stores';
+	import { getModelDisplayName } from '$lib/utils/modelImages';
 	import Collapsible from '$lib/components/common/Collapsible.svelte';
 	import FileItem from '$lib/components/common/FileItem.svelte';
 	import Image from '$lib/components/common/Image.svelte';
@@ -95,7 +96,9 @@
 					{$i18n.t('Select a model')}
 				</option>
 				{#each $models.filter((model) => !(model?.info?.meta?.hidden ?? false)) as model}
-					<option value={model.id} class="bg-gray-50 dark:bg-gray-700">{model.name}</option>
+					<option value={model.id} class="bg-gray-50 dark:bg-gray-700"
+						>{getModelDisplayName(model)}</option
+					>
 				{/each}
 			</select>
 		</div>

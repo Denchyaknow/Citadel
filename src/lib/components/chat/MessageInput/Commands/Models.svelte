@@ -5,7 +5,12 @@
 	import { tick, getContext } from 'svelte';
 
 	import { models } from '$lib/stores';
-	import { WEBUI_API_BASE_URL, WEBUI_BASE_URL } from '$lib/constants';
+	import {
+		getModelDisplayName,
+		getModelProfileImageUrl,
+		getModelTooltipLabel,
+		useCitadelImageFallback
+	} from '$lib/utils/modelImages';
 	import Tooltip from '$lib/components/common/Tooltip.svelte';
 
 	const i18n = getContext('i18n');
@@ -66,7 +71,7 @@
 
 {#if filteredItems.length > 0}
 	{#each filteredItems as model, modelIdx}
-		<Tooltip content={model.id} placement="top-start">
+		<Tooltip content={getModelTooltipLabel(model)} placement="top-start">
 			<button
 				class="px-2.5 py-1.5 rounded-xl w-full text-left {modelIdx === selectedIdx
 					? 'bg-gray-50 dark:bg-gray-800 selected-command-option-button'
@@ -83,15 +88,13 @@
 			>
 				<div class="flex text-black dark:text-gray-100 line-clamp-1">
 					<img
-						src={`${WEBUI_API_BASE_URL}/models/model/profile/image?id=${model.id}&lang=${$i18n.language}`}
-						alt={model?.name ?? model.id}
+						src={getModelProfileImageUrl(model.id, $i18n.language)}
+						alt={getModelDisplayName(model)}
 						class="rounded-full size-5 items-center mr-2"
-						on:error={(e) => {
-							e.currentTarget.src = '/favicon.png';
-						}}
+						on:error={useCitadelImageFallback}
 					/>
 					<div class="truncate">
-						{model.name}
+						{getModelDisplayName(model)}
 					</div>
 				</div>
 			</button>

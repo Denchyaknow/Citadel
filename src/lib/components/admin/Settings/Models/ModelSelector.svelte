@@ -4,6 +4,7 @@
 
 	import Minus from '$lib/components/icons/Minus.svelte';
 	import Tooltip from '$lib/components/common/Tooltip.svelte';
+	import { getModelDisplayName } from '$lib/utils/modelImages';
 
 	export let title = '';
 	export let tooltip = '';
@@ -55,7 +56,9 @@
 				<option value="">{$i18n.t('Select a model')}</option>
 				{#each models as model}
 					{#if !modelIds.includes(model.id)}
-						<option value={model.id} class="bg-gray-50 dark:bg-gray-700">{model.name}</option>
+						<option value={model.id} class="bg-gray-50 dark:bg-gray-700"
+							>{getModelDisplayName(model)}</option
+						>
 					{/if}
 				{/each}
 			</select>

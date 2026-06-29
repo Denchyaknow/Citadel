@@ -1,9 +1,9 @@
 <script lang="ts">
-	import { WEBUI_BASE_URL } from '$lib/constants';
+	import { CITADEL_ICON_URL } from '$lib/utils/modelImages';
 	import { safeImageUrl } from '$lib/utils/safeImageUrl';
 
 	export let className = 'size-8';
-	export let src = `${WEBUI_BASE_URL}/static/favicon.png`;
+	export let src = CITADEL_ICON_URL;
 </script>
 
 <img

@@ -19,6 +19,7 @@
 	import localizedFormat from 'dayjs/plugin/localizedFormat';
 	import ProfileImage from './ProfileImage.svelte';
 	import { WEBUI_BASE_URL } from '$lib/constants';
+	import { getModelDisplayName } from '$lib/utils/modelImages';
 	import equal from 'fast-deep-equal';
 	const i18n = getContext('i18n');
 	dayjs.extend(localizedFormat);
@@ -282,7 +283,7 @@
 									>
 										<div class="flex items-center gap-1.5">
 											<div class="-translate-y-[1px]">
-												{model ? `${model.name}` : history.messages[_messageId]?.model}
+												{model ? getModelDisplayName(model) : history.messages[_messageId]?.model}
 											</div>
 										</div>
 									</button>

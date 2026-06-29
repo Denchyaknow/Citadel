@@ -62,6 +62,7 @@
 	import { getSkills } from '$lib/apis/skills';
 
 	import { WEBUI_BASE_URL, WEBUI_API_BASE_URL, PASTED_TEXT_CHARACTER_LIMIT } from '$lib/constants';
+	import { getModelProfileImageUrl, useCitadelImageFallback } from '$lib/utils/modelImages';
 	import { getOAuthClientAuthorizationUrl } from '$lib/apis/configs';
 
 	import { createNoteHandler } from '../notes/utils';
@@ -1307,7 +1308,8 @@
 											<img
 												alt="model profile"
 												class="size-3.5 max-w-[28px] object-cover rounded-full"
-												src={`${WEBUI_API_BASE_URL}/models/model/profile/image?id=${$models.find((model) => model.id === atSelectedModel.id).id}&lang=${$i18n.language}`}
+												src={getModelProfileImageUrl(atSelectedModel.id, $i18n.language)}
+												on:error={useCitadelImageFallback}
 											/>
 											<div class="translate-y-[0.5px]">
 												<span class="">{atSelectedModel.name}</span>

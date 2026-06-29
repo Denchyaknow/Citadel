@@ -115,6 +115,7 @@
 	import Image from '../common/Image.svelte';
 	import { getBanners } from '$lib/apis/configs';
 	import { getHermesProfileFromModelId, isHermesModelId } from '$lib/apis/hermes';
+	import { getModelDisplayName } from '$lib/utils/modelImages';
 
 	export let chatIdProp = '';
 
@@ -1680,7 +1681,7 @@
 				done: true,
 
 				model: modelId,
-				modelName: model.name ?? model.id,
+				modelName: getModelDisplayName(model),
 				modelIdx: 0,
 				timestamp: Math.floor(Date.now() / 1000)
 			};
@@ -1740,7 +1741,7 @@
 					childrenIds: [],
 					done: true,
 					model: model.id,
-					modelName: model.name ?? model.id,
+					modelName: getModelDisplayName(model),
 					modelIdx: 0,
 					timestamp: Math.floor(Date.now() / 1000),
 					...message
@@ -2131,7 +2132,7 @@
 					content: '',
 					done: false,
 					model: model.id,
-					modelName: model.name ?? model.id,
+					modelName: getModelDisplayName(model),
 					modelIdx: modelIdx ? modelIdx : _modelIdx,
 					timestamp: Math.floor(Date.now() / 1000) // Unix epoch
 				};
@@ -2185,7 +2186,7 @@
 				) {
 					toast.error(
 						$i18n.t('Model {{modelName}} is not vision capable', {
-							modelName: model.name ?? model.id
+							modelName: getModelDisplayName(model)
 						})
 					);
 				}

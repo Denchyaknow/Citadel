@@ -27,7 +27,6 @@
 		isApp,
 		models,
 		selectedFolder,
-		WEBUI_NAME,
 		sidebarWidth,
 		activeChatIds
 	} from '$lib/stores';
@@ -51,7 +50,12 @@
 	import { updateUserSettings } from '$lib/apis/users';
 	import { checkActiveChats } from '$lib/apis/tasks';
 	import { createNoteHandler } from '$lib/components/notes/utils';
-	import { WEBUI_API_BASE_URL, WEBUI_BASE_URL } from '$lib/constants';
+	import {
+		CITADEL_ENABLE_GLOBAL_SEARCH_NAV,
+		CITADEL_ENABLE_WORKSPACE_NAV,
+		WEBUI_API_BASE_URL,
+		WEBUI_BASE_URL
+	} from '$lib/constants';
 
 	import ArchivedChatsModal from './ArchivedChatsModal.svelte';
 	import UserMenu from './Sidebar/UserMenu.svelte';
@@ -74,9 +78,10 @@
 	import Code from '../icons/Code.svelte';
 	import { slide } from 'svelte/transition';
 	import HotkeyHint from '../common/HotkeyHint.svelte';
+	import { CITADEL_ICON_URL } from '$lib/utils/modelImages';
 
 	const BREAKPOINT = 768;
-	const DEFAULT_PINNED_ITEMS = ['notes', 'workspace'];
+	const DEFAULT_PINNED_ITEMS = ['notes'];
 
 	let scrollTop = 0;
 
@@ -115,12 +120,13 @@
 				);
 			case 'workspace':
 				return (
-					$user?.role === 'admin' ||
-					$user?.permissions?.workspace?.models ||
-					$user?.permissions?.workspace?.knowledge ||
-					$user?.permissions?.workspace?.prompts ||
-					$user?.permissions?.workspace?.tools ||
-					$user?.permissions?.workspace?.skills
+					CITADEL_ENABLE_WORKSPACE_NAV &&
+					($user?.role === 'admin' ||
+						$user?.permissions?.workspace?.models ||
+						$user?.permissions?.workspace?.knowledge ||
+						$user?.permissions?.workspace?.prompts ||
+						$user?.permissions?.workspace?.tools ||
+						$user?.permissions?.workspace?.skills)
 				);
 			case 'automations':
 				return (
@@ -751,14 +757,16 @@
 	/>
 {/if}
 
-<SearchModal
-	bind:show={$showSearch}
-	onClose={() => {
-		if ($mobile) {
-			showSidebar.set(false);
-		}
-	}}
-/>
+{#if CITADEL_ENABLE_GLOBAL_SEARCH_NAV}
+	<SearchModal
+		bind:show={$showSearch}
+		onClose={() => {
+			if ($mobile) {
+				showSidebar.set(false);
+			}
+		}}
+	/>
+{/if}
 
 <button
 	id="sidebar-new-chat-button"
@@ -803,9 +811,9 @@
 					>
 						<div class=" self-center flex items-center justify-center size-9">
 							<img
-								src="{WEBUI_BASE_URL}/static/favicon.png"
+								src={CITADEL_ICON_URL}
 								class="sidebar-new-chat-icon size-6 rounded-full group-hover:hidden"
-								alt=""
+								alt="Citadel"
 							/>
 
 							<Sidebar className="size-5 hidden group-hover:flex" />
@@ -837,25 +845,27 @@
 					</Tooltip>
 				</div>
 
-				<div>
-					<Tooltip content={$i18n.t('Search')} placement="right">
-						<button
-							class=" cursor-pointer flex rounded-xl hover:bg-gray-100 dark:hover:bg-gray-850 transition group"
-							on:click={(e) => {
-								e.stopImmediatePropagation();
-								e.preventDefault();
+				{#if CITADEL_ENABLE_GLOBAL_SEARCH_NAV}
+					<div>
+						<Tooltip content={$i18n.t('Search')} placement="right">
+							<button
+								class=" cursor-pointer flex rounded-xl hover:bg-gray-100 dark:hover:bg-gray-850 transition group"
+								on:click={(e) => {
+									e.stopImmediatePropagation();
+									e.preventDefault();
 
-								showSearch.set(true);
-							}}
-							draggable="false"
-							aria-label={$i18n.t('Search')}
-						>
-							<div class=" self-center flex items-center justify-center size-9">
-								<Search className="size-4.5" />
-							</div>
-						</button>
-					</Tooltip>
-				</div>
+									showSearch.set(true);
+								}}
+								draggable="false"
+								aria-label={$i18n.t('Search')}
+							>
+								<div class=" self-center flex items-center justify-center size-9">
+									<Search className="size-4.5" />
+								</div>
+							</button>
+						</Tooltip>
+					</div>
+				{/if}
 
 				{#each pinnedItems as itemId (itemId)}
 					{@const meta = getMenuItemMeta(itemId)}
@@ -1007,26 +1017,16 @@
 				class="sidebar px-[0.5625rem] pt-2 pb-1.5 flex justify-between space-x-1 text-gray-600 dark:text-gray-400 sticky top-0 z-10 -mb-3"
 			>
 				<a
-					class="flex items-center rounded-xl size-8.5 h-full justify-center hover:bg-gray-100/50 dark:hover:bg-gray-850/50 transition no-drag-region"
 					href="/"
+					class="flex flex-1 items-center gap-2 rounded-xl px-2 py-1.5 text-white hover:bg-gray-100/50 dark:hover:bg-gray-850/50 transition no-drag-region"
 					draggable="false"
 					on:click={newChatHandler}
+					aria-label="Citadel home"
 				>
-					<img
-						crossorigin="anonymous"
-						src="{WEBUI_BASE_URL}/static/favicon.png"
-						class="sidebar-new-chat-icon size-6 rounded-full"
-						alt=""
-					/>
-				</a>
-
-				<a href="/" class="flex flex-1 px-0.5" on:click={newChatHandler}>
-					<div
-						id="sidebar-webui-name"
-						class=" self-center font-medium text-gray-850 dark:text-white font-primary"
-					>
-						{$WEBUI_NAME}
-					</div>
+					<img src={CITADEL_ICON_URL} class="size-6 rounded-full shrink-0" alt="" />
+					<span id="sidebar-webui-name" class="self-center font-medium font-primary text-white">
+						Citadel
+					</span>
 				</a>
 				<Tooltip
 					content={$showSidebar ? $i18n.t('Close Sidebar') : $i18n.t('Open Sidebar')}
@@ -1086,26 +1086,28 @@
 						</a>
 					</div>
 
-					<div class="px-[0.4375rem] flex justify-center text-gray-800 dark:text-gray-200">
-						<button
-							id="sidebar-search-button"
-							class="group grow flex items-center space-x-3 rounded-2xl px-2.5 py-2 hover:bg-gray-100 dark:hover:bg-gray-900 transition outline-none"
-							on:click={() => {
-								showSearch.set(true);
-							}}
-							draggable="false"
-							aria-label={$i18n.t('Search')}
-						>
-							<div class="self-center">
-								<Search strokeWidth="2" className="size-4.5" />
-							</div>
+					{#if CITADEL_ENABLE_GLOBAL_SEARCH_NAV}
+						<div class="px-[0.4375rem] flex justify-center text-gray-800 dark:text-gray-200">
+							<button
+								id="sidebar-search-button"
+								class="group grow flex items-center space-x-3 rounded-2xl px-2.5 py-2 hover:bg-gray-100 dark:hover:bg-gray-900 transition outline-none"
+								on:click={() => {
+									showSearch.set(true);
+								}}
+								draggable="false"
+								aria-label={$i18n.t('Search')}
+							>
+								<div class="self-center">
+									<Search strokeWidth="2" className="size-4.5" />
+								</div>
 
-							<div class="flex flex-1 self-center translate-y-[0.5px]">
-								<div class=" self-center text-sm font-primary">{$i18n.t('Search')}</div>
-							</div>
-							<HotkeyHint name="search" className=" group-hover:visible invisible" />
-						</button>
-					</div>
+								<div class="flex flex-1 self-center translate-y-[0.5px]">
+									<div class=" self-center text-sm font-primary">{$i18n.t('Search')}</div>
+								</div>
+								<HotkeyHint name="search" className=" group-hover:visible invisible" />
+							</button>
+						</div>
+					{/if}
 
 					<div id="pinned-menu-items-list">
 						{#each pinnedItems as itemId (itemId)}

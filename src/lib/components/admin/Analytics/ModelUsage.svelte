@@ -5,7 +5,11 @@
 	import Spinner from '$lib/components/common/Spinner.svelte';
 	import ChevronUp from '$lib/components/icons/ChevronUp.svelte';
 	import ChevronDown from '$lib/components/icons/ChevronDown.svelte';
-	import { WEBUI_API_BASE_URL } from '$lib/constants';
+	import {
+		getModelDisplayName,
+		getModelProfileImageUrl,
+		useCitadelImageFallback
+	} from '$lib/utils/modelImages';
 
 	const i18n = getContext('i18n');
 
@@ -27,7 +31,7 @@
 		loading = true;
 		try {
 			const result = await getModelAnalytics(localStorage.token);
-			const modelsMap = new Map($models.map((m) => [m.id, m.name || m.id]));
+			const modelsMap = new Map($models.map((m) => [m.id, getModelDisplayName(m) || m.id]));
 
 			modelStats = (result?.models ?? []).map((entry) => ({
 				...entry,
@@ -143,12 +147,10 @@
 						<td class="px-3 py-1.5">
 							<div class="flex items-center gap-2">
 								<img
-									src="{WEBUI_API_BASE_URL}/models/model/profile/image?id={model.model_id}"
+									src={getModelProfileImageUrl(model.model_id)}
 									alt={model.name}
 									class="size-5 rounded-full object-cover shrink-0"
-									on:error={(e) => {
-										e.target.src = '/favicon.png';
-									}}
+									on:error={useCitadelImageFallback}
 								/>
 								<span class="font-medium text-gray-800 dark:text-gray-200">{model.name}</span>
 							</div>

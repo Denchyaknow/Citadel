@@ -5,7 +5,11 @@
 	import dayjs from '$lib/dayjs';
 
 	import { mobile, settings, user } from '$lib/stores';
-	import { WEBUI_API_BASE_URL, WEBUI_BASE_URL } from '$lib/constants';
+	import {
+		getModelProfileImageUrl,
+		getModelShareUrl,
+		useCitadelImageFallback
+	} from '$lib/utils/modelImages';
 
 	import Tooltip from '$lib/components/common/Tooltip.svelte';
 	import { copyToClipboard, sanitizeResponseContent } from '$lib/utils';
@@ -32,7 +36,7 @@
 
 	const copyLinkHandler = async (model) => {
 		const baseUrl = window.location.origin;
-		const res = await copyToClipboard(`${baseUrl}/?model=${encodeURIComponent(model.id)}`);
+		const res = await copyToClipboard(getModelShareUrl(model, baseUrl));
 
 		if (res) {
 			toast.success($i18n.t('Copied link to clipboard'));
@@ -42,6 +46,9 @@
 	};
 
 	let showMenu = false;
+	$: isAgentProfile = item?.model?.owned_by === 'hermes';
+	$: adminTooltipContent = isAgentProfile ? (item?.label ?? '') : (item?.value ?? '');
+	$: labelTooltipContent = isAgentProfile ? (item?.label ?? '') : `${item.label} (${item.value})`;
 </script>
 
 <button
@@ -77,21 +84,19 @@
 
 		<div class="flex items-center gap-2">
 			<div class="flex items-center min-w-fit">
-				<Tooltip content={$user?.role === 'admin' ? (item?.value ?? '') : ''} placement="top-start">
+				<Tooltip content={$user?.role === 'admin' ? adminTooltipContent : ''} placement="top-start">
 					<img
-						src={`${WEBUI_API_BASE_URL}/models/model/profile/image?id=${item.model.id}&lang=${$i18n.language}`}
+						src={getModelProfileImageUrl(item.model.id, $i18n.language)}
 						alt={$i18n.t('{{modelName}} profile image', { modelName: item.label })}
 						class="rounded-full size-5 flex items-center"
 						loading="lazy"
-						on:error={(e) => {
-							e.currentTarget.src = '/favicon.png';
-						}}
+						on:error={useCitadelImageFallback}
 					/>
 				</Tooltip>
 			</div>
 
 			<div class="flex items-center">
-				<Tooltip content={`${item.label} (${item.value})`} placement="top-start">
+				<Tooltip content={labelTooltipContent} placement="top-start">
 					<div class="line-clamp-1">
 						{item.label}
 					</div>

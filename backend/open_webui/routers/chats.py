@@ -63,7 +63,7 @@ async def get_session_user_chat_list(
         try:
             await sync_hermes_sessions_to_chats(user, db=db)
         except Exception:
-            log.debug('Hermes session sync failed while loading chat list', exc_info=True)
+            log.debug('Agent session sync failed while loading chat list', exc_info=True)
 
         if page is not None:
             limit = 60

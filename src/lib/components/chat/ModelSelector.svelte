@@ -6,11 +6,13 @@
 	import Tooltip from '../common/Tooltip.svelte';
 
 	import { updateUserSettings } from '$lib/apis/users';
+	import { getModelDisplayName } from '$lib/utils/modelImages';
 	import {
 		buildHermesModelId,
 		getHermesFallbackFromModelId,
 		getHermesProfileFromModelId,
-		isHermesModelId
+		isHermesModelId,
+		toPascalCaseProfileName
 	} from '$lib/apis/hermes';
 	import equal from 'fast-deep-equal';
 	const i18n = getContext('i18n');
@@ -114,10 +116,10 @@
 				<div class="max-w-full {($settings?.highContrastMode ?? false) ? 'm-1' : 'mr-1'}">
 					<Selector
 						id="hermes-profile"
-						placeholder="Select a Hermes profile"
+						placeholder="Select a profile"
 						items={hermesProfileModels.map((model) => ({
 							value: model.id,
-							label: model.name,
+							label: toPascalCaseProfileName(model.hermes?.profile ?? model.name),
 							model: model
 						}))}
 						{pinModelHandler}
@@ -168,7 +170,7 @@
 						placeholder={$i18n.t('Select a model')}
 						items={$models.map((model) => ({
 							value: model.id,
-							label: model.name,
+							label: getModelDisplayName(model),
 							model: model
 						}))}
 						{pinModelHandler}

@@ -13,6 +13,7 @@
 	import Spinner from '$lib/components/common/Spinner.svelte';
 	import Modal from '$lib/components/common/Modal.svelte';
 	import XMark from '$lib/components/icons/XMark.svelte';
+	import { useUserImageFallback } from '$lib/utils/modelImages';
 	import {
 		getPromptHistory,
 		setProductionPromptVersion,
@@ -659,7 +660,7 @@
 										src={`/api/v1/users/${entry.user.id}/profile/image`}
 										alt={entry.user.name}
 										class="size-3 rounded-full mr-0.5"
-										on:error={(e) => (e.target.src = '/user.png')}
+										on:error={useUserImageFallback}
 									/>
 									<span class="truncate">{entry.user.name}</span>
 									<span>•</span>

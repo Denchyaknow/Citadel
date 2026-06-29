@@ -14,6 +14,7 @@
 		WEBUI_BASE_URL
 	} from '$lib/constants';
 	import { WEBUI_NAME, config, user, models, settings } from '$lib/stores';
+	import { getModelDisplayName } from '$lib/utils/modelImages';
 
 	import { chatCompletion } from '$lib/apis/openai';
 
@@ -502,7 +503,7 @@
 								>
 									{#each $models as model}
 										<option value={model.id} class="bg-gray-50 dark:bg-gray-700"
-											>{model.name}</option
+											>{getModelDisplayName(model)}</option
 										>
 									{/each}
 								</select>

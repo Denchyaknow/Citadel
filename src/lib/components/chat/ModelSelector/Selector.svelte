@@ -35,6 +35,7 @@
 	import Tooltip from '$lib/components/common/Tooltip.svelte';
 	import Switch from '$lib/components/common/Switch.svelte';
 	import ChatBubbleOval from '$lib/components/icons/ChatBubbleOval.svelte';
+	import { getModelDisplayName } from '$lib/utils/modelImages';
 
 	import ModelItem from './ModelItem.svelte';
 
@@ -461,7 +462,9 @@
 		if (res) {
 			// $i18n.t('Model {{modelId}} not found')
 			toast.success(
-				$i18n.t('Model {{modelName}} deleted successfully', { modelName: model.name ?? model.id })
+				$i18n.t('Model {{modelName}} deleted successfully', {
+					modelName: getModelDisplayName(model)
+				})
 			);
 
 			// If the deleted model was selected, clear the selection

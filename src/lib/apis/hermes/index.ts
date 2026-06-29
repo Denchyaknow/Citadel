@@ -1,4 +1,5 @@
 import { WEBUI_API_BASE_URL } from '$lib/constants';
+import { toPascalCaseName } from '$lib/utils/modelImages';
 
 const HERMES_PREFIX = 'hermes:';
 const HERMES_MODEL_OVERRIDE_SEP = '#model=';
@@ -12,6 +13,10 @@ export const getHermesProfileFromModelId = (modelId: string | null | undefined) 
 	}
 	const value = modelId as string;
 	return value.slice(HERMES_PREFIX.length).split(HERMES_MODEL_OVERRIDE_SEP)[0] || 'default';
+};
+
+export const toPascalCaseProfileName = (value: string | null | undefined) => {
+	return toPascalCaseName(value, 'Default');
 };
 
 export const getHermesFallbackFromModelId = (modelId: string | null | undefined) => {

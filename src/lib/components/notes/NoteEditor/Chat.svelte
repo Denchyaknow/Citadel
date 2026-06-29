@@ -1,6 +1,7 @@
 <script lang="ts">
 	export let show = false;
 	export let selectedModelId = '';
+	import { getModelDisplayName } from '$lib/utils/modelImages';
 
 	import { marked } from 'marked';
 	// Configure marked with extensions
@@ -428,7 +429,7 @@ Based on the user's instruction, update and enhance the existing notes or select
 								>
 									{#each $models.filter((model) => !(model?.info?.meta?.hidden ?? false)) as model}
 										<option value={model.id} class="bg-gray-50 dark:bg-gray-700"
-											>{model.name}</option
+											>{getModelDisplayName(model)}</option
 										>
 									{/each}
 								</select>

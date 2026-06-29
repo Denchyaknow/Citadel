@@ -12,7 +12,13 @@
 	const i18n = getContext('i18n');
 
 	import { WEBUI_NAME, config, mobile, models as _models, settings, user } from '$lib/stores';
-	import { WEBUI_API_BASE_URL, WEBUI_BASE_URL } from '$lib/constants';
+	import { WEBUI_BASE_URL } from '$lib/constants';
+	import {
+		getModelDisplayName,
+		getModelProfileImageUrl,
+		getModelShareUrl,
+		useCitadelImageFallback
+	} from '$lib/utils/modelImages';
 	import {
 		createNewModel,
 		deleteModelById,
@@ -192,7 +198,7 @@
 
 	const copyLinkHandler = async (model) => {
 		const baseUrl = window.location.origin;
-		const res = await copyToClipboard(`${baseUrl}/?model=${encodeURIComponent(model.id)}`);
+		const res = await copyToClipboard(getModelShareUrl(model, baseUrl));
 
 		if (res) {
 			toast.success($i18n.t('Copied link to clipboard'));
@@ -598,14 +604,12 @@
 												: 'opacity-50 dark:opacity-50'} bg-transparent rounded-2xl"
 										>
 											<img
-												src={`${WEBUI_API_BASE_URL}/models/model/profile/image?id=${model.id}&lang=${$i18n.language}`}
+												src={getModelProfileImageUrl(model.id, $i18n.language)}
 												alt="modelfile profile"
 												class=" rounded-2xl size-12 object-cover"
 												loading="lazy"
 												decoding="async"
-												on:error={(e) => {
-													e.target.src = '/favicon.png';
-												}}
+												on:error={useCitadelImageFallback}
 											/>
 										</div>
 									</div>
@@ -615,12 +619,16 @@
 									<div class="flex h-full w-full flex-1 flex-col justify-start self-center group">
 										<div class="flex-1 w-full">
 											<div class="flex items-center justify-between w-full">
-												<Tooltip content={model.name} className=" w-fit" placement="top-start">
+												<Tooltip
+													content={getModelDisplayName(model)}
+													className=" w-fit"
+													placement="top-start"
+												>
 													<a
 														class=" font-medium line-clamp-1 hover:underline capitalize"
 														href={`/?models=${encodeURIComponent(model.id)}`}
 													>
-														{model.name}
+														{getModelDisplayName(model)}
 													</a>
 												</Tooltip>
 
@@ -759,7 +767,7 @@
 												<div>·</div>
 
 												<Tooltip
-													content={marked.parse(model?.meta?.description ?? model.id)}
+													content={marked.parse(model?.meta?.description ?? getModelDisplayName(model))}
 													className=" w-fit text-left"
 													placement="top-start"
 												>
@@ -768,7 +776,7 @@
 															{#if (model?.meta?.description ?? '').trim()}
 																{model?.meta?.description}
 															{:else}
-																{model.id}
+																{getModelDisplayName(model)}
 															{/if}
 														</div>
 													</div>

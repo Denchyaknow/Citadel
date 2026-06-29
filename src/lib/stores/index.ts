@@ -208,7 +208,8 @@ type Settings = {
 	autoTags?: boolean;
 	autoFollowUps?: boolean;
 	splitLargeChunks?(body: any, splitLargeChunks: any): unknown;
-	backgroundImageUrl?: null;
+	backgroundImageUrl?: string | null;
+	loginBackgroundImageUrl?: string | null;
 	landingPageMode?: string;
 	iframeSandboxAllowForms?: boolean;
 	iframeSandboxAllowSameOrigin?: boolean;

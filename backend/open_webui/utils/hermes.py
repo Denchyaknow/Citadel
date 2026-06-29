@@ -5,6 +5,7 @@ import hashlib
 import json
 import logging
 import os
+import re
 import time
 import uuid
 from pathlib import Path
@@ -61,6 +62,11 @@ def hermes_model_override_from_model(model_id: str | None) -> str | None:
     return override or None
 
 
+def display_profile_name(value: str | None) -> str:
+    words = re.findall(r'[A-Za-z0-9]+', re.sub(r'([a-z0-9])([A-Z])', r'\1 \2', value or 'default'))
+    return ''.join(word[:1].upper() + word[1:].lower() for word in words) or 'Default'
+
+
 def _timeout() -> aiohttp.ClientTimeout:
     return aiohttp.ClientTimeout(total=HERMES_TIMEOUT, connect=10)
 
@@ -75,14 +81,14 @@ async def _session() -> aiohttp.ClientSession:
         async with session.post(
             f'{HERMES_BASE_URL}/api/auth/login',
             json={'password': HERMES_PASSWORD},
-            headers={'User-Agent': 'Citadel-Hermes-Backend/1.0'},
+            headers={'User-Agent': 'Citadel-Backend/1.0'},
         ) as response:
             if response.status >= 400:
                 text = await response.text()
                 await session.close()
                 raise HTTPException(
                     status_code=status.HTTP_502_BAD_GATEWAY,
-                    detail=f'Hermes authentication failed: HTTP {response.status} {text[:200]}',
+                    detail=f'Agent service authentication failed: HTTP {response.status} {text[:200]}',
                 )
     return session
 
@@ -95,14 +101,14 @@ async def hermes_json(method: str, path: str, *, request_timeout: float | None =
         async with session.request(
             method,
             f'{HERMES_BASE_URL}{path}',
-            headers={'User-Agent': 'Citadel-Hermes-Backend/1.0', **kwargs.pop('headers', {})},
+            headers={'User-Agent': 'Citadel-Backend/1.0', **kwargs.pop('headers', {})},
             **kwargs,
         ) as response:
             text = await response.text()
             if response.status >= 400:
                 raise HTTPException(
                     status_code=status.HTTP_502_BAD_GATEWAY,
-                    detail=f'Hermes {path} failed: HTTP {response.status} {text[:400]}',
+                    detail=f'Agent service {path} failed: HTTP {response.status} {text[:400]}',
                 )
             if not text:
                 return {}
@@ -159,7 +165,7 @@ def _profile_fallback_models(profile: Any) -> list[dict[str, Any]]:
     try:
         config = yaml.safe_load(config_path.read_text(encoding='utf-8')) if config_path.exists() else {}
     except Exception:
-        log.debug('Unable to read Hermes profile config at %s', config_path, exc_info=True)
+        log.debug('Unable to read agent profile config at %s', config_path, exc_info=True)
         return []
     fallback_providers = config.get('fallback_providers', []) if isinstance(config, dict) else []
     if not isinstance(fallback_providers, list):
@@ -190,7 +196,7 @@ async def fetch_hermes_models(request: Request | None = None, user: Any = None) 
     try:
         data = await hermes_profiles()
     except Exception as exc:
-        log.warning('Unable to fetch Hermes profiles: %s', exc)
+        log.warning('Unable to fetch agent profiles: %s', exc)
         return []
 
     profiles = data.get('profiles', []) if isinstance(data, dict) else []
@@ -204,9 +210,10 @@ async def fetch_hermes_models(request: Request | None = None, user: Any = None) 
     for name in names:
         profile = profile_by_name.get(name, {})
         fallbacks = _profile_fallback_models(profile)
+        display_name = display_profile_name(name)
         items.append({
             'id': f'{HERMES_MODEL_PREFIX}{name}',
-            'name': f'Hermes / {name}',
+            'name': display_name,
             'object': 'model',
             'created': 0,
             'owned_by': 'hermes',
@@ -217,7 +224,7 @@ async def fetch_hermes_models(request: Request | None = None, user: Any = None) 
                 'base_url': HERMES_BASE_URL,
                 'fallbacks': fallbacks,
             },
-            'tags': [{'name': 'Hermes Agent'}],
+            'tags': [{'name': 'Agent'}],
         })
     return items
 
@@ -291,7 +298,7 @@ def _title_from_hermes_session(session: dict[str, Any]) -> str:
             text = _message_text(message).strip()
             if text:
                 return text[:60]
-    return 'Hermes Session'
+    return 'AgentSession'
 
 
 def _session_detail_from_payload(payload: Any) -> dict[str, Any] | None:
@@ -408,7 +415,7 @@ async def _read_session_map() -> dict[str, str]:
             if isinstance(data, dict):
                 return {str(k): str(v) for k, v in data.items() if v}
     except Exception:
-        log.debug('Unable to read Hermes session map', exc_info=True)
+        log.debug('Unable to read agent session map', exc_info=True)
     return {}
 
 
@@ -446,7 +453,7 @@ async def _write_session_map(data: dict[str, str]) -> None:
         tmp.write_text(json.dumps(data, indent=2, sort_keys=True), encoding='utf-8')
         tmp.replace(HERMES_MAP_FILE)
     except Exception:
-        log.debug('Unable to write Hermes session map', exc_info=True)
+        log.debug('Unable to write agent session map', exc_info=True)
 
 
 async def _upsert_hermes_chat_shadow(
@@ -463,7 +470,7 @@ async def _upsert_hermes_chat_shadow(
         'source': 'hermes',
         'hermes_session_id': payload['hermes']['session_id'],
         'hermes_profile': payload['hermes']['profile'],
-        'tags': ['hermes'],
+        'tags': ['agent'],
     }
 
     async with get_async_db_context(db) as session_db:
@@ -544,7 +551,7 @@ async def sync_hermes_sessions_to_chats(
                     if isinstance(detail_session, dict):
                         detail = {**compact, **detail_session}
                 except Exception:
-                    log.debug('Unable to hydrate Hermes session %s during sync', hermes_session_id, exc_info=True)
+                    log.debug('Unable to hydrate agent session %s during sync', hermes_session_id, exc_info=True)
 
             chat = await _upsert_hermes_chat_shadow(user=user, chat_id=chat_id, session=detail, db=db)
             if chat:
@@ -591,7 +598,7 @@ async def hydrate_hermes_chat(chat: ChatModel, user: Any, *, db=None) -> ChatMod
         updated = await _upsert_hermes_chat_shadow(user=user, chat_id=chat.id, session=detail, db=db)
         return updated or chat
     except Exception:
-        log.debug('Unable to hydrate Hermes chat %s from session %s', chat.id, hermes_session_id, exc_info=True)
+        log.debug('Unable to hydrate agent chat %s from session %s', chat.id, hermes_session_id, exc_info=True)
         return chat
 
 
@@ -617,7 +624,7 @@ async def _get_or_create_hermes_session(
             if response.status >= 400:
                 raise HTTPException(
                     status_code=status.HTTP_502_BAD_GATEWAY,
-                    detail=f'Hermes session creation failed: HTTP {response.status} {text[:400]}',
+                    detail=f'Agent session creation failed: HTTP {response.status} {text[:400]}',
                 )
             payload = json.loads(text or '{}')
         hermes_session = payload.get('session') if isinstance(payload, dict) else None
@@ -625,7 +632,7 @@ async def _get_or_create_hermes_session(
         if not session_id:
             raise HTTPException(
                 status_code=status.HTTP_502_BAD_GATEWAY,
-                detail='Hermes session creation did not return a session_id',
+                detail='Agent session creation did not return a session_id',
             )
         session_map[key] = session_id
         await _write_session_map(session_map)
@@ -690,7 +697,7 @@ async def _hermes_event_stream(
             text = await response.text()
             raise HTTPException(
                 status_code=status.HTTP_502_BAD_GATEWAY,
-                detail=f'Hermes stream failed: HTTP {response.status} {text[:400]}',
+                detail=f'Agent stream failed: HTTP {response.status} {text[:400]}',
             )
         event = 'message'
         data_lines: list[str] = []
@@ -708,7 +715,7 @@ async def _hermes_event_stream(
                         break
                     if event in {'error', 'apperror'}:
                         error_text = str(payload.get('message') or payload.get('error') or payload)
-                        yield _openai_chunk(completion_id, model_id, f'\n\n**Hermes error:** {error_text}')
+                        yield _openai_chunk(completion_id, model_id, f'\n\n**Agent error:** {error_text}')
                         break
                     text = _sse_payload_text(event, payload if isinstance(payload, dict) else {'text': payload})
                     if text:
@@ -757,14 +764,14 @@ async def _start_hermes_turn(
         if response.status >= 400:
             raise HTTPException(
                 status_code=status.HTTP_502_BAD_GATEWAY,
-                detail=f'Hermes chat start failed: HTTP {response.status} {text[:400]}',
+                detail=f'Agent chat start failed: HTTP {response.status} {text[:400]}',
             )
         payload = json.loads(text or '{}')
     stream_id = payload.get('stream_id') if isinstance(payload, dict) else None
     if not stream_id:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail='Hermes chat start did not return a stream_id',
+            detail='Agent chat start did not return a stream_id',
         )
     return str(stream_id)
 
@@ -775,7 +782,7 @@ async def generate_hermes_chat_completion(request: Request, form_data: dict[str,
     messages = form_data.get('messages') or []
     prompt = _latest_user_text(messages)
     if not prompt:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='Hermes chat requires a user message')
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail='Agent chat requires a user message')
 
     completion_id = f'chatcmpl-hermes-{uuid.uuid4().hex}'
     client = await _session()

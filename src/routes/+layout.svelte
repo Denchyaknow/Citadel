@@ -62,8 +62,9 @@
 		removeTerminalConnection
 	} from '$lib/utils/connections';
 
-	import { WEBUI_API_BASE_URL, WEBUI_BASE_URL, WEBUI_HOSTNAME } from '$lib/constants';
+	import { APP_NAME, WEBUI_API_BASE_URL, WEBUI_BASE_URL, WEBUI_HOSTNAME } from '$lib/constants';
 	import { bestMatchingLanguage, displayFileHandler, getUserTimezone } from '$lib/utils';
+	import { CITADEL_ICON_URL } from '$lib/utils/modelImages';
 	import { setTextScale } from '$lib/utils/text-scale';
 
 	import NotificationToast from '$lib/components/NotificationToast.svelte';
@@ -498,9 +499,9 @@
 
 			if ($isLastActiveTab) {
 				if ($settings?.notificationEnabled ?? false) {
-					new Notification(`${data.title} • Open WebUI`, {
+					new Notification(`${data.title} • ${APP_NAME}`, {
 						body: timeStr,
-						icon: `${WEBUI_BASE_URL}/static/favicon.png`
+						icon: CITADEL_ICON_URL
 					});
 				}
 			}
@@ -629,9 +630,9 @@
 
 					if ($isLastActiveTab) {
 						if ($settings?.notificationEnabled ?? false) {
-							new Notification(`${displayTitle} • Open WebUI`, {
+							new Notification(`${displayTitle} • ${APP_NAME}`, {
 								body: content,
-								icon: `${WEBUI_BASE_URL}/static/favicon.png`
+								icon: CITADEL_ICON_URL
 							});
 						}
 					}
@@ -737,7 +738,7 @@
 
 				if ($isLastActiveTab) {
 					if ($settings?.notificationEnabled ?? false) {
-						new Notification(`${title} • Open WebUI`, {
+						new Notification(`${title} • ${APP_NAME}`, {
 							body: data?.content,
 							icon: `${WEBUI_API_BASE_URL}/users/${data?.user?.id}/profile/image`
 						});
@@ -1048,7 +1049,7 @@
 		if (backendConfig) {
 			// Save Backend Status to Store
 			await config.set(backendConfig);
-			await WEBUI_NAME.set(backendConfig.name);
+			await WEBUI_NAME.set(backendConfig.name === 'Open WebUI' ? APP_NAME : backendConfig.name);
 
 			if ($config) {
 				await setupSocket($config.features?.enable_websocket ?? true);
@@ -1162,7 +1163,7 @@
 
 <svelte:head>
 	<title>{$WEBUI_NAME}</title>
-	<link crossorigin="anonymous" rel="icon" href="{WEBUI_BASE_URL}/static/favicon.png" />
+	<link crossorigin="anonymous" rel="icon" href={CITADEL_ICON_URL} />
 
 	<meta name="apple-mobile-web-app-title" content={$WEBUI_NAME} />
 	<meta name="description" content={$WEBUI_NAME} />

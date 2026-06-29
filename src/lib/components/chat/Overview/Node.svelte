@@ -1,7 +1,8 @@
 <script lang="ts">
-	import { WEBUI_API_BASE_URL } from '$lib/constants';
 	import { Handle, Position, type NodeProps } from '@xyflow/svelte';
 	import { getContext } from 'svelte';
+	import { WEBUI_API_BASE_URL } from '$lib/constants';
+	import { getModelProfileImageUrl } from '$lib/utils/modelImages';
 
 	import ProfileImage from '../Messages/ProfileImage.svelte';
 	import Tooltip from '$lib/components/common/Tooltip.svelte';
@@ -44,7 +45,7 @@
 		{:else}
 			<div class="flex w-full">
 				<ProfileImage
-					src={`${WEBUI_API_BASE_URL}/models/model/profile/image?id=${data.model?.id ?? data.message.model}&lang=${$i18n.language}`}
+					src={getModelProfileImageUrl(data.model?.id ?? data.message.model, $i18n.language)}
 					className={'size-5 -translate-y-[1px] flex-shrink-0'}
 				/>
 

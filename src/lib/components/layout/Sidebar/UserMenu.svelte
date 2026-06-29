@@ -17,7 +17,7 @@
 		settings
 	} from '$lib/stores';
 
-	import { WEBUI_API_BASE_URL } from '$lib/constants';
+	import { CITADEL_ENABLE_WORKSPACE_NAV, WEBUI_API_BASE_URL } from '$lib/constants';
 
 	import Dropdown from '$lib/components/common/Dropdown.svelte';
 	import Tooltip from '$lib/components/common/Tooltip.svelte';
@@ -58,7 +58,7 @@
 
 	const dispatch = createEventDispatcher();
 
-	const DEFAULT_PINNED_ITEMS = ['notes', 'workspace'];
+	const DEFAULT_PINNED_ITEMS = ['notes'];
 
 	$: pinnedItems = $settings?.pinnedMenuItems ?? DEFAULT_PINNED_ITEMS;
 
@@ -301,7 +301,7 @@
 
 			<hr class=" border-gray-50/30 dark:border-gray-800/30 my-1 p-0" />
 
-			{#if $user?.role === 'admin' || $user?.permissions?.workspace?.models || $user?.permissions?.workspace?.knowledge || $user?.permissions?.workspace?.prompts || $user?.permissions?.workspace?.tools}
+			{#if CITADEL_ENABLE_WORKSPACE_NAV && ($user?.role === 'admin' || $user?.permissions?.workspace?.models || $user?.permissions?.workspace?.knowledge || $user?.permissions?.workspace?.prompts || $user?.permissions?.workspace?.tools)}
 				<div class="flex items-center w-full">
 					<a
 						href="/workspace"

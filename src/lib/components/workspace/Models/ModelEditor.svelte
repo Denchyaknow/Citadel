@@ -3,7 +3,8 @@
 
 	import { onMount, getContext, tick } from 'svelte';
 	import { models, tools, functions, user } from '$lib/stores';
-	import { WEBUI_BASE_URL, DEFAULT_CAPABILITIES } from '$lib/constants';
+	import { DEFAULT_CAPABILITIES } from '$lib/constants';
+	import { CITADEL_ICON_URL, getModelDisplayName } from '$lib/utils/modelImages';
 
 	import { getTools } from '$lib/apis/tools';
 	import { getSkills } from '$lib/apis/skills';
@@ -77,7 +78,7 @@
 		base_model_id: null,
 		name: '',
 		meta: {
-			profile_image_url: `${WEBUI_BASE_URL}/static/favicon.png`,
+			profile_image_url: CITADEL_ICON_URL,
 			description: '',
 			suggestion_prompts: null,
 			tags: []
@@ -496,7 +497,7 @@
 							<div class="self-center">
 								<button
 									class="rounded-2xl flex shrink-0 items-center {info.meta.profile_image_url !==
-									`${WEBUI_BASE_URL}/static/favicon.png`
+									CITADEL_ICON_URL
 										? 'bg-transparent'
 										: 'bg-white'} shadow-xl group relative"
 									type="button"
@@ -513,7 +514,7 @@
 										/>
 									{:else}
 										<img
-											src="{WEBUI_BASE_URL}/static/favicon.png"
+											src={CITADEL_ICON_URL}
 											alt="model profile"
 											class=" rounded-xl size-20 md:size-48 object-cover shrink-0"
 										/>
@@ -549,7 +550,7 @@
 									<button
 										class="px-2 py-1 text-gray-500 rounded-lg text-xs"
 										on:click={() => {
-											info.meta.profile_image_url = `${WEBUI_BASE_URL}/static/favicon.png`;
+											info.meta.profile_image_url = CITADEL_ICON_URL;
 										}}
 										type="button"
 									>
@@ -618,7 +619,9 @@
 												>{$i18n.t('Select a base model')}</option
 											>
 											{#each $models.filter((m) => (model ? m.id !== model.id : true) && !m?.preset && m?.owned_by !== 'arena' && !(m?.direct ?? false)) as model}
-												<option value={model.id} class=" text-gray-900">{model.name}</option>
+												<option value={model.id} class=" text-gray-900"
+													>{getModelDisplayName(model)}</option
+												>
 											{/each}
 										</select>
 									</div>

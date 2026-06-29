@@ -38,10 +38,16 @@
 	import ModelMenu from '$lib/components/admin/Settings/Models/ModelMenu.svelte';
 	import EllipsisHorizontal from '$lib/components/icons/EllipsisHorizontal.svelte';
 	import EyeSlash from '$lib/components/icons/EyeSlash.svelte';
+	import {
+		getModelDisplayName,
+		getModelProfileImageUrl,
+		getModelShareUrl,
+		useCitadelImageFallback
+	} from '$lib/utils/modelImages';
 	import Eye from '$lib/components/icons/Eye.svelte';
 	import CheckCircle from '$lib/components/icons/CheckCircle.svelte';
 	import Minus from '$lib/components/icons/Minus.svelte';
-	import { WEBUI_API_BASE_URL, WEBUI_BASE_URL } from '$lib/constants';
+	import { WEBUI_BASE_URL } from '$lib/constants';
 	import { goto } from '$app/navigation';
 
 	import Dropdown from '$lib/components/common/Dropdown.svelte';
@@ -285,7 +291,7 @@
 
 	const copyLinkHandler = async (model) => {
 		const baseUrl = window.location.origin;
-		const res = await copyToClipboard(`${baseUrl}/?model=${encodeURIComponent(model.id)}`);
+		const res = await copyToClipboard(getModelShareUrl(model, baseUrl));
 
 		if (res) {
 			toast.success($i18n.t('Copied link to clipboard'));
@@ -593,12 +599,10 @@
 											: 'opacity-50 dark:opacity-50'} "
 									>
 										<img
-											src={`${WEBUI_API_BASE_URL}/models/model/profile/image?id=${model.id}`}
+											src={getModelProfileImageUrl(model.id)}
 											alt="modelfile profile"
 											class=" rounded-full w-full h-auto object-cover"
-											on:error={(e) => {
-												e.target.src = '/favicon.png';
-											}}
+											on:error={useCitadelImageFallback}
 										/>
 									</div>
 								</div>
@@ -612,13 +616,13 @@
 												? model?.meta?.description
 												: model?.ollama?.digest
 													? `${model?.ollama?.digest} **(${model?.ollama?.modified_at})**`
-													: model.id
+													: getModelDisplayName(model)
 										)}
 										className=" w-fit"
 										placement="top-start"
 									>
 										<div class="font-medium line-clamp-1 flex items-center gap-2">
-											{model.name}
+											{getModelDisplayName(model)}
 
 											<Badge
 												type={(model?.access_grants ?? []).some(
@@ -648,7 +652,7 @@
 												? model?.meta?.description
 												: model?.ollama?.digest
 													? `${model.id} (${model?.ollama?.digest})`
-													: model.id}
+													: getModelDisplayName(model)}
 										</span>
 									</div>
 								</div>

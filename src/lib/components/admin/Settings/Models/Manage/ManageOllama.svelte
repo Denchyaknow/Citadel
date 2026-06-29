@@ -5,6 +5,7 @@
 
 	import { WEBUI_NAME, models, MODEL_DOWNLOAD_POOL, user, config, settings } from '$lib/stores';
 	import { splitStream } from '$lib/utils';
+	import { getModelDisplayName } from '$lib/utils/modelImages';
 
 	import {
 		createModel,
@@ -820,7 +821,7 @@
 
 								{#each ollamaModels as model}
 									<option value={model.id} class="bg-gray-50 dark:bg-gray-700"
-										>{model.name + ' (' + (model.size / 1024 ** 3).toFixed(1) + ' GB)'}</option
+										>{`${getModelDisplayName(model)} (${(model.size / 1024 ** 3).toFixed(1)} GB)`}</option
 									>
 								{/each}
 							</select>

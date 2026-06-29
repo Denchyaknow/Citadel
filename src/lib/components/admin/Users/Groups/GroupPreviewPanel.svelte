@@ -2,6 +2,7 @@
 	import { getContext } from 'svelte';
 	import { getGroupPreview } from '$lib/apis/groups';
 	import Spinner from '$lib/components/common/Spinner.svelte';
+	import { getModelDisplayName } from '$lib/utils/modelImages';
 
 	const i18n = getContext('i18n');
 
@@ -49,7 +50,7 @@
 				{:else}
 					{#each preview.models.items as model}
 						<div class="flex w-full justify-between my-1">
-							<div class=" self-center text-xs font-medium">{model.name}</div>
+							<div class=" self-center text-xs font-medium">{getModelDisplayName(model)}</div>
 						</div>
 					{/each}
 

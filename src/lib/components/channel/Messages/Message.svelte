@@ -17,6 +17,7 @@
 
 	import { settings, user, shortCodesToEmojis } from '$lib/stores';
 	import { WEBUI_API_BASE_URL, WEBUI_BASE_URL } from '$lib/constants';
+	import { getModelProfileImageUrl, useCitadelImageFallback } from '$lib/utils/modelImages';
 	import { getMessageData } from '$lib/apis/channels';
 
 	import Markdown from '$lib/components/chat/Messages/Markdown.svelte';
@@ -328,13 +329,11 @@
 					>
 						{#if message?.reply_to_message?.meta?.model_id}
 							<img
-								src={`${WEBUI_API_BASE_URL}/models/model/profile/image?id=${message.reply_to_message.meta.model_id}`}
+								src={getModelProfileImageUrl(message.reply_to_message.meta.model_id)}
 								alt={message.reply_to_message.meta.model_name ??
 									message.reply_to_message.meta.model_id}
 								class="size-4 ml-0.5 rounded-full object-cover"
-								on:error={(e) => {
-									e.currentTarget.src = '/favicon.png';
-								}}
+								on:error={useCitadelImageFallback}
 							/>
 						{:else}
 							<img
@@ -372,12 +371,10 @@
 					{#if showUserProfile}
 						{#if message?.meta?.model_id}
 							<img
-								src={`${WEBUI_API_BASE_URL}/models/model/profile/image?id=${message.meta.model_id}`}
+								src={getModelProfileImageUrl(message.meta.model_id)}
 								alt={message.meta.model_name ?? message.meta.model_id}
 								class="size-8 translate-y-1 ml-0.5 object-cover rounded-full"
-								on:error={(e) => {
-									e.currentTarget.src = '/favicon.png';
-								}}
+								on:error={useCitadelImageFallback}
 							/>
 						{:else if message.user?.role === 'webhook'}
 							<ProfileImage

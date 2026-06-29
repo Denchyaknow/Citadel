@@ -2,7 +2,7 @@
 	import { toast } from 'svelte-sonner';
 	import { goto } from '$app/navigation';
 	import { config, models, settings } from '$lib/stores';
-	import { WEBUI_BASE_URL } from '$lib/constants';
+	import { CITADEL_ICON_URL } from '$lib/utils/modelImages';
 
 	import { onMount, tick, getContext } from 'svelte';
 	import { createNewModel, getModelById } from '$lib/apis/models';
@@ -33,8 +33,7 @@
 				...modelInfo,
 				meta: {
 					...modelInfo.meta,
-					profile_image_url:
-						modelInfo.meta.profile_image_url ?? `${WEBUI_BASE_URL}/static/favicon.png`,
+					profile_image_url: modelInfo.meta.profile_image_url ?? CITADEL_ICON_URL,
 					suggestion_prompts: modelInfo.meta.suggestion_prompts
 						? modelInfo.meta.suggestion_prompts.filter((prompt) => prompt.content !== '')
 						: null

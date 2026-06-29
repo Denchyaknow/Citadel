@@ -1,6 +1,6 @@
 {
-  "name": "Open WebUI",
-  "short_name": "WebUI",
+  "name": "Citadel",
+  "short_name": "Citadel",
   "icons": [
     {
       "src": "/static/web-app-manifest-192x192.png",

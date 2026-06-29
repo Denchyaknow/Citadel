@@ -13,7 +13,7 @@
 	import AccessControl from '$lib/components/workspace/common/AccessControl.svelte';
 	import ConfirmDialog from '$lib/components/common/ConfirmDialog.svelte';
 	import XMark from '$lib/components/icons/XMark.svelte';
-	import { WEBUI_BASE_URL } from '$lib/constants';
+	import { CITADEL_ICON_URL, getModelDisplayName } from '$lib/utils/modelImages';
 
 	export let show = false;
 	export let edit = false;
@@ -37,7 +37,7 @@
 		}
 	};
 
-	let profileImageUrl = `${WEBUI_BASE_URL}/favicon.png`;
+	let profileImageUrl = CITADEL_ICON_URL;
 	let description = '';
 
 	let selectedModelId = '';
@@ -93,7 +93,7 @@
 
 		name = '';
 		id = '';
-		profileImageUrl = `${WEBUI_BASE_URL}/favicon.png`;
+		profileImageUrl = CITADEL_ICON_URL;
 		description = '';
 		modelIds = [];
 		selectedModelId = '';
@@ -357,7 +357,9 @@
 							>
 								<option value="">{$i18n.t('Select a model')}</option>
 								{#each $models.filter((m) => m?.owned_by !== 'arena') as model}
-									<option value={model.id} class="bg-gray-50 dark:bg-gray-700">{model.name}</option>
+									<option value={model.id} class="bg-gray-50 dark:bg-gray-700"
+										>{getModelDisplayName(model)}</option
+									>
 								{/each}
 							</select>
 

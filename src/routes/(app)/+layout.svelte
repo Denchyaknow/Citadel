@@ -15,7 +15,11 @@
 	import { getTerminalServers } from '$lib/apis/terminal';
 	import { getUserSettings } from '$lib/apis/users';
 
-	import { WEBUI_VERSION, WEBUI_API_BASE_URL } from '$lib/constants';
+	import {
+		CITADEL_ENABLE_GLOBAL_SEARCH_NAV,
+		WEBUI_VERSION,
+		WEBUI_API_BASE_URL
+	} from '$lib/constants';
 	import { compareVersion } from '$lib/utils';
 
 	import {
@@ -243,7 +247,10 @@
 
 		const setupKeyboardShortcuts = () => {
 			document.addEventListener('keydown', async (event) => {
-				if (isShortcutMatch(event, shortcuts[Shortcut.SEARCH])) {
+				if (
+					CITADEL_ENABLE_GLOBAL_SEARCH_NAV &&
+					isShortcutMatch(event, shortcuts[Shortcut.SEARCH])
+				) {
 					console.log('Shortcut triggered: SEARCH');
 					event.preventDefault();
 					showSearch.set(!$showSearch);

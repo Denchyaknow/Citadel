@@ -12,12 +12,16 @@
 	export let saveSettings: Function;
 
 	let showManageModal = false;
+	let loginBackgroundImageUrl = null;
+	let loginBackgroundFiles = null;
+	let loginBackgroundInputElement;
 
 	// Addons
 	let enableMemory = false;
 
 	onMount(async () => {
 		enableMemory = $settings?.memory ?? false;
+		loginBackgroundImageUrl = $settings?.loginBackgroundImageUrl ?? null;
 	});
 </script>
 
@@ -30,6 +34,35 @@
 		dispatch('save');
 	}}
 >
+	<input
+		bind:this={loginBackgroundInputElement}
+		bind:files={loginBackgroundFiles}
+		type="file"
+		hidden
+		accept="image/*"
+		on:change={() => {
+			let reader = new FileReader();
+			reader.onload = (event) => {
+				let originalImageUrl = `${event.target.result}`;
+				loginBackgroundImageUrl = originalImageUrl;
+				saveSettings({ loginBackgroundImageUrl });
+			};
+
+			if (
+				loginBackgroundFiles &&
+				loginBackgroundFiles.length > 0 &&
+				['image/gif', 'image/webp', 'image/jpeg', 'image/png'].includes(
+					loginBackgroundFiles[0]['type']
+				)
+			) {
+				reader.readAsDataURL(loginBackgroundFiles[0]);
+			} else {
+				console.log(`Unsupported File Type '${loginBackgroundFiles[0]['type']}'.`);
+				loginBackgroundFiles = null;
+			}
+		}}
+	/>
+
 	<div class="py-1 overflow-y-scroll max-h-[28rem] md:max-h-full">
 		<div>
 			<div class="flex items-center justify-between mb-1">
@@ -85,6 +118,36 @@
 			>
 				{$i18n.t('Manage')}
 			</button>
+		</div>
+
+		<div class="mt-5 pt-4 border-t border-gray-100 dark:border-gray-850">
+			<div class="mb-2 text-sm font-medium">
+				{$i18n.t('Login Screen')}
+			</div>
+
+			<div class="py-0.5 flex w-full justify-between">
+				<div id="login-background-label" class="self-center text-xs">
+					{$i18n.t('Login Background Image')}
+				</div>
+
+				<button
+					aria-labelledby="login-background-label login-background-image-url-state"
+					class="p-1 px-3 text-xs flex rounded-sm transition"
+					on:click={() => {
+						if (loginBackgroundImageUrl !== null) {
+							loginBackgroundImageUrl = null;
+							saveSettings({ loginBackgroundImageUrl });
+						} else {
+							loginBackgroundInputElement.click();
+						}
+					}}
+					type="button"
+				>
+					<span class="ml-2 self-center" id="login-background-image-url-state"
+						>{loginBackgroundImageUrl !== null ? $i18n.t('Reset') : $i18n.t('Upload')}</span
+					>
+				</button>
+			</div>
 		</div>
 	</div>
 
