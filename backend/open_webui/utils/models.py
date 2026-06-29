@@ -11,6 +11,7 @@ from open_webui.config import (
 )
 from open_webui.env import BYPASS_MODEL_ACCESS_CONTROL, GLOBAL_LOG_LEVEL
 from open_webui.functions import get_function_models
+from open_webui.utils.hermes import fetch_hermes_models
 from open_webui.models.access_grants import AccessGrants
 from open_webui.models.functions import Functions
 from open_webui.models.groups import Groups
@@ -64,9 +65,16 @@ async def get_all_base_models(request: Request, user: UserModel = None):
     )
     function_task = get_function_models(request)
 
-    openai_models, ollama_models, function_models = await asyncio.gather(openai_task, ollama_task, function_task)
+    hermes_task = fetch_hermes_models(request, user)
 
-    return function_models + openai_models + ollama_models
+    openai_models, ollama_models, function_models, hermes_models = await asyncio.gather(
+        openai_task,
+        ollama_task,
+        function_task,
+        hermes_task,
+    )
+
+    return function_models + hermes_models + openai_models + ollama_models
 
 
 async def get_all_models(request, refresh: bool = False, user: UserModel = None):
