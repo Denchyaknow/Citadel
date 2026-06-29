@@ -42,6 +42,55 @@
 	let confirmPassword = '';
 
 	let ldapUsername = '';
+	let loginBackgroundImageUrl: string | null = null;
+	let recentLoginUsers: Array<{ name: string; email: string; lastLoginAt: number }> = [];
+
+	const LOGIN_BACKGROUND_STORAGE_KEY = 'citadelLoginBackgroundImageUrl';
+	const RECENT_LOGIN_USERS_STORAGE_KEY = 'citadelRecentLoginUsers';
+
+	const getUserDisplayName = (account: { name?: string; email?: string }) => {
+		return account.name || account.email?.split('@')?.[0] || account.email || '';
+	};
+
+	const loadRecentLoginUsers = () => {
+		try {
+			const accounts = JSON.parse(localStorage.getItem(RECENT_LOGIN_USERS_STORAGE_KEY) ?? '[]');
+			if (Array.isArray(accounts)) {
+				recentLoginUsers = accounts
+					.filter((account) => account?.email)
+					.sort((a, b) => (b.lastLoginAt ?? 0) - (a.lastLoginAt ?? 0))
+					.slice(0, 12);
+			}
+		} catch {
+			recentLoginUsers = [];
+		}
+	};
+
+	const rememberLoginUser = (sessionUser) => {
+		const accountEmail = sessionUser?.email ?? email;
+		if (!accountEmail) {
+			return;
+		}
+
+		const account = {
+			name: sessionUser?.name ?? accountEmail.split('@')?.[0] ?? accountEmail,
+			email: accountEmail,
+			lastLoginAt: Date.now()
+		};
+
+		const nextAccounts = [
+			account,
+			...recentLoginUsers.filter((item) => item.email !== account.email)
+		].slice(0, 12);
+		recentLoginUsers = nextAccounts;
+		localStorage.setItem(RECENT_LOGIN_USERS_STORAGE_KEY, JSON.stringify(nextAccounts));
+	};
+
+	const selectRecentLoginUser = (account: { name: string; email: string }) => {
+		mode = 'signin';
+		email = account.email;
+		password = '';
+	};
 
 	const setSessionUser = async (sessionUser, redirectPath: string | null = null) => {
 		if (sessionUser) {
@@ -50,6 +99,7 @@
 			if (sessionUser.token) {
 				localStorage.token = sessionUser.token;
 			}
+			rememberLoginUser(sessionUser);
 			$socket.emit('user-join', { auth: { token: sessionUser.token } });
 			await user.set(sessionUser);
 			await config.set(await getBackendConfig());
@@ -144,6 +194,12 @@
 	let onboarding = false;
 
 	onMount(async () => {
+		loginBackgroundImageUrl =
+			localStorage.getItem(LOGIN_BACKGROUND_STORAGE_KEY) ??
+			$settings?.loginBackgroundImageUrl ??
+			null;
+		loadRecentLoginUsers();
+
 		const redirectPath = $page.url.searchParams.get('redirect');
 		if ($user !== undefined) {
 			goto(redirectPath || '/');
@@ -208,12 +264,12 @@
 
 <div class="w-full h-screen max-h-[100dvh] text-white relative" id="auth-page">
 	<div class="w-full h-full absolute top-0 left-0 bg-white dark:bg-black"></div>
-	{#if $settings?.loginBackgroundImageUrl}
+	{#if loginBackgroundImageUrl}
 		<div
 			class="w-full h-full absolute top-0 left-0 bg-cover bg-center bg-no-repeat"
-			style="background-image: url({$settings.loginBackgroundImageUrl})"
+			style="background-image: url({loginBackgroundImageUrl})"
 		></div>
-		<div class="w-full h-full absolute top-0 left-0 bg-white/85 dark:bg-black/70"></div>
+		<div class="w-full h-full absolute top-0 left-0 bg-white/80 dark:bg-black/65"></div>
 	{/if}
 
 	<div class="w-full absolute top-0 left-0 right-0 h-8 drag-region" />
@@ -588,23 +644,40 @@
 						{/if}
 					</div>
 				{/if}
+
+				{#if recentLoginUsers.length > 0 && !($config?.onboarding ?? false)}
+					<aside
+						class="hidden lg:flex fixed right-8 top-1/2 -translate-y-1/2 w-72 max-h-[min(32rem,calc(100dvh-8rem))] flex-col rounded-2xl border border-gray-200/70 dark:border-gray-800/80 bg-white/80 dark:bg-black/45 backdrop-blur-xl shadow-sm text-left overflow-hidden"
+						aria-label={$i18n.t('Recent Users')}
+					>
+						<div class="px-4 py-3 text-xs font-medium text-gray-500 dark:text-gray-400">
+							{$i18n.t('Recent Users')}
+						</div>
+
+						<div class="overflow-y-auto px-2 pb-2">
+							{#each recentLoginUsers as account (account.email)}
+								<button
+									type="button"
+									class="w-full flex items-center gap-3 rounded-xl px-3 py-2.5 text-left hover:bg-gray-100/80 dark:hover:bg-white/10 transition"
+									on:click={() => selectRecentLoginUser(account)}
+								>
+									<div
+										class="size-8 rounded-full bg-gray-900 text-white dark:bg-white dark:text-black flex items-center justify-center text-xs font-semibold shrink-0"
+										aria-hidden="true"
+									>
+										{getUserDisplayName(account).charAt(0).toUpperCase()}
+									</div>
+									<div class="min-w-0">
+										<div class="truncate text-sm font-medium text-gray-900 dark:text-gray-100">
+											{getUserDisplayName(account)}
+										</div>
+									</div>
+								</button>
+							{/each}
+						</div>
+					</aside>
+				{/if}
 			</div>
 		</div>
-
-		{#if !$config?.metadata?.auth_logo_position}
-			<div class="fixed m-10 z-50">
-				<div class="flex space-x-2">
-					<div class=" self-center">
-						<img
-							id="logo"
-							crossorigin="anonymous"
-							src={CITADEL_ICON_URL}
-							class=" w-6 rounded-full"
-							alt=""
-						/>
-					</div>
-				</div>
-			</div>
-		{/if}
 	{/if}
 </div>

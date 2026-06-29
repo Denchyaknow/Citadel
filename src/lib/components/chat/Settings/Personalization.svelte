@@ -1,8 +1,7 @@
 <script lang="ts">
 	import Switch from '$lib/components/common/Switch.svelte';
-	import { config, models, settings, user } from '$lib/stores';
-	import { createEventDispatcher, onMount, getContext, tick } from 'svelte';
-	import { toast } from 'svelte-sonner';
+	import { settings } from '$lib/stores';
+	import { createEventDispatcher, onMount, getContext } from 'svelte';
 	import ManageModal from './Personalization/ManageModal.svelte';
 	import Tooltip from '$lib/components/common/Tooltip.svelte';
 	const dispatch = createEventDispatcher();
@@ -15,13 +14,27 @@
 	let loginBackgroundImageUrl = null;
 	let loginBackgroundFiles = null;
 	let loginBackgroundInputElement;
+	const LOGIN_BACKGROUND_STORAGE_KEY = 'citadelLoginBackgroundImageUrl';
+
+	const saveLoginBackgroundImageUrl = (value: string | null) => {
+		loginBackgroundImageUrl = value;
+		if (value) {
+			localStorage.setItem(LOGIN_BACKGROUND_STORAGE_KEY, value);
+		} else {
+			localStorage.removeItem(LOGIN_BACKGROUND_STORAGE_KEY);
+		}
+		saveSettings({ loginBackgroundImageUrl });
+	};
 
 	// Addons
 	let enableMemory = false;
 
 	onMount(async () => {
 		enableMemory = $settings?.memory ?? false;
-		loginBackgroundImageUrl = $settings?.loginBackgroundImageUrl ?? null;
+		loginBackgroundImageUrl =
+			$settings?.loginBackgroundImageUrl ??
+			localStorage.getItem(LOGIN_BACKGROUND_STORAGE_KEY) ??
+			null;
 	});
 </script>
 
@@ -44,8 +57,7 @@
 			let reader = new FileReader();
 			reader.onload = (event) => {
 				let originalImageUrl = `${event.target.result}`;
-				loginBackgroundImageUrl = originalImageUrl;
-				saveSettings({ loginBackgroundImageUrl });
+				saveLoginBackgroundImageUrl(originalImageUrl);
 			};
 
 			if (
@@ -135,8 +147,7 @@
 					class="p-1 px-3 text-xs flex rounded-sm transition"
 					on:click={() => {
 						if (loginBackgroundImageUrl !== null) {
-							loginBackgroundImageUrl = null;
-							saveSettings({ loginBackgroundImageUrl });
+							saveLoginBackgroundImageUrl(null);
 						} else {
 							loginBackgroundInputElement.click();
 						}
