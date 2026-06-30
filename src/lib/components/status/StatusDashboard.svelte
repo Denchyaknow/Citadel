@@ -12,6 +12,8 @@
 	import { getStatusSummary, type StatusSummary } from '$lib/apis/status';
 	import { showSidebar } from '$lib/stores';
 
+	import AgentTownHero from './AgentTownHero.svelte';
+
 	const ORDER_STORAGE_KEY = 'citadel-status-module-order';
 	const DEFAULT_ORDER = [
 		'system-health',
@@ -205,6 +207,7 @@
 		</div>
 	{:else if data}
 		<main class="status-content">
+			<AgentTownHero summary={data} {days} />
 			<div class="status-columns" style={`--status-columns: ${columnCount}`}>
 				{#each moduleColumns as column, columnIndex (columnIndex)}
 					<div class="status-column">

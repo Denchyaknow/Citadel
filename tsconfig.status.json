@@ -1,0 +1,24 @@
+{
+	"extends": "./.svelte-kit/tsconfig.json",
+	"compilerOptions": {
+		"allowJs": true,
+		"checkJs": false,
+		"esModuleInterop": true,
+		"forceConsistentCasingInFileNames": true,
+		"resolveJsonModule": true,
+		"skipLibCheck": true,
+		"sourceMap": true,
+		"strict": false
+	},
+	"include": [
+		".svelte-kit/ambient.d.ts",
+		".svelte-kit/non-ambient.d.ts",
+		".svelte-kit/types/**/$types.d.ts",
+		"src/app.d.ts",
+		"src/lib/components/status/AgentTownHero.svelte",
+		"src/lib/components/status/AgentTownFallback.svelte",
+		"src/lib/citadel-town/**/*.ts",
+		"src/lib/apis/status/index.ts"
+	],
+	"exclude": ["node_modules/**"]
+}

@@ -1,0 +1,21 @@
+{
+	"version": 1,
+	"basePath": "/citadel-town",
+	"tiles": {
+		"ground": "tiles/ground.svg"
+	},
+	"buildings": {
+		"memory": "buildings/memory.svg",
+		"skills": "buildings/skills.svg",
+		"automations": "buildings/automations.svg",
+		"chat": "buildings/chat.svg",
+		"models": "buildings/models.svg",
+		"system": "buildings/system.svg"
+	},
+	"avatars": {
+		"agentBlue": "avatars/agent-blue.svg",
+		"agentGreen": "avatars/agent-green.svg",
+		"agentAmber": "avatars/agent-amber.svg",
+		"agentRose": "avatars/agent-rose.svg"
+	}
+}
