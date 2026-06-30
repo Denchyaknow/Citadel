@@ -1,389 +1,455 @@
-# Citadel - EdgeSecure Research Fork
+# Citadel
 
 EdgeSecure is forking this repo in the name of science.
 
-Citadel is an EdgeSecure-maintained research fork of [Open WebUI](https://github.com/open-webui/open-webui). The original upstream README is preserved below this section so the base project context, license notes, and general Open WebUI installation material stay intact. This top section documents the Citadel-specific changes added in the latest local commits.
+Citadel is an EdgeSecure research fork of [Open WebUI](https://github.com/open-webui/open-webui) rebuilt around localized Hermes agents. It keeps the useful Open WebUI application base, then changes the chat, automation, status, branding, and navigation layers so Citadel can act as a LAN-accessible control surface for local agent profiles.
 
-Upstream source: https://github.com/open-webui/open-webui
+Fork source: https://github.com/Denchyaknow/Citadel
 
-Current fork source: https://github.com/Denchyaknow/Citadel
+Upstream base: https://github.com/open-webui/open-webui
 
----
+## What Citadel Is
 
-## Citadel Overview
+Citadel is a self-hosted AI dashboard for local and private workflows. It is designed to sit between a user and a localized Hermes agent service:
 
-Citadel keeps the Open WebUI application foundation but bends the chat, automation, status, and branding layers toward EdgeSecure's localized Hermes agent environment. In practice, Citadel behaves like a local operator console: users interact with familiar chat and automation screens, while selected conversations and scheduled work are handed off to Hermes profiles running on the local network or host.
+- Citadel handles the browser UI, users, permissions, chat shell, saved chat rows, automations screens, and status dashboard.
+- Hermes handles agent profiles, profile memory, profile-specific training, agent skills, tool execution, sessions, and cron-backed scheduled work.
+- Local or configured model providers still supply model inference behind Hermes or through retained Open WebUI provider paths.
 
-The intent is not to expose every Hermes implementation detail in the UI. Citadel shows profiles, sessions, automations, status, and useful activity telemetry, then sends user requests and context to Hermes through a backend bridge.
+The goal is to let users work from a clean web app without bypassing Hermes. When a Hermes profile is selected, Citadel sends the user message and basic Citadel context to Hermes, then streams the Hermes response back through the normal chat UI.
 
-## Latest EdgeSecure Changes
+## Codex Session Review
 
-### Hermes agent integration
+This README was updated after reviewing the last 10 local Codex sessions on this machine. The relevant sessions covered:
 
-- Added a backend Hermes client and router.
-- Added authenticated Citadel endpoints under `/api/v1/hermes` for health, profiles, sessions, sync, skills, and Hermes cron job operations.
-- Exposes Hermes profiles as virtual Citadel models named like `hermes:<profile>`.
-- Gives the model selector a Hermes profile picker and optional fallback model selector when a Hermes profile advertises fallback providers.
-- Routes chats for Hermes-owned models through Hermes instead of sending them directly to Ollama or an OpenAI-compatible provider.
-- Converts Hermes streaming responses back into OpenAI-compatible chat chunks so the existing chat UI can render them normally.
-- Stores Citadel chat to Hermes session continuity in `DATA_DIR/citadel_hermes_sessions.json`.
-- Syncs Hermes session records into the Citadel chat list as lightweight chat rows so prior Hermes sessions can be reopened from Citadel.
+- Hermes WebUI LAN binding and service setup on port `8787`.
+- EdgeTower fork workflow and upstream-sync rules used as reference for Citadel.
+- Citadel fork creation from Open WebUI and LAN service setup.
+- Citadel/Hermes backend adapter work.
+- Citadel live service setup as `Citadel_Gates.service` on port `8080`.
+- Sidebar and navigation changes, including hiding workspace/global search paths.
+- Citadel rebrand, icon replacement, favicon/splash updates, and PascalCase display cleanup.
+- Login screen personalization and recent-user picker.
+- Hermes-backed automation and cron endpoint debugging.
+- Status dashboard creation, layout fixes, route containment, and navigation fixes.
+- README cleanup to make this repository stand on its own.
 
-### Localized Hermes data flow
+## New Citadel Features
 
-At a high level, Citadel gets data from three places:
+### Hermes Agent Bridge
 
-- Citadel's own database for users, chats, messages, tokens, costs, and app settings.
-- The localized Hermes service for agent profiles, active sessions, skills, cron jobs, and streamed agent responses.
-- Local host or Hermes usage files for status dashboard details such as CPU, memory, disk, and skill usage counters.
+- Adds a Citadel backend client for Hermes.
+- Adds authenticated Hermes proxy routes under `/api/v1/hermes`.
+- Reads Hermes health, profiles, sessions, skills, and cron job data.
+- Exposes Hermes profiles as virtual model ids such as `hermes:default`.
+- Routes Hermes profile chats through Hermes instead of talking straight to Ollama or OpenAI-compatible providers.
+- Converts Hermes streaming events into chat-completion style chunks that the existing UI can render.
+- Stores Citadel-to-Hermes session continuity in `DATA_DIR/citadel_hermes_sessions.json`.
+- Syncs Hermes sessions into Citadel as lightweight chat rows so users can reopen agent sessions from the Citadel chat list.
 
-When a user selects a Hermes profile and sends a chat message, Citadel creates or reuses a Hermes session for that user/profile/chat combination. Citadel sends the latest user message, selected profile, optional fallback model, attachments when present, and a small `citadel_context` block that identifies the source as Citadel and includes user/chat/folder/workspace metadata. Hermes returns a stream id, Citadel reads the Hermes stream, and the response is delivered back to the browser through the normal chat streaming path.
+### Profile and Model Selection
 
-This keeps Citadel responsible for the web app and user workflow while Hermes remains responsible for localized agent behavior, profile selection, memory, skills, and tool execution.
+- Replaces the normal model-first flow with a Hermes profile-first flow when Hermes profiles are available.
+- Shows profile names in PascalCase.
+- Avoids showing "Hermes" branding in normal frontend labels except where implementation docs need the term.
+- Shows fallback model choices only when the selected profile advertises fallback providers.
+- Keeps normal OpenAI/Ollama/function models available when Hermes profiles are not being used.
 
-### Hermes-backed automations
+### Citadel Context Sent to Agents
 
-- Reworked the automations API client to use Hermes cron jobs.
-- Added backend proxy routes for listing, creating, editing, pausing, resuming, triggering, deleting, and inspecting Hermes cron jobs.
-- Added profile-aware automation records so scheduled work belongs to a Hermes profile.
-- Added run history support with status, run previews, filenames, errors, and running-state refresh.
-- Updated automation filters to include running and completed states.
-- Preserved the Citadel permission checks around automations before allowing access to Hermes-backed job controls.
+Citadel sends rough context to Hermes so localized agents know where a request came from. The context is intentionally small and app-level:
 
-### Status dashboard
+- Source is marked as `citadel`.
+- User identity metadata can include name, email, id, and role.
+- Chat, folder, and workspace metadata can be included when available.
+- Attachments can be forwarded when present.
+- Optional fallback model choice can be passed through when selected.
 
-- Added a new Citadel status route at `/status`.
-- Added a backend summary endpoint at `/api/v1/status/summary`.
-- Shows system health, skill usage, session counts, message counts, token totals, estimated costs, daily token activity, model breakdowns, and activity by day/hour.
-- Supports user-scoped data for normal users and global data for admins.
-- Handles non-JSON or stale backend responses with clearer restart guidance.
-- Keeps the status page inside the main app layout and points sidebar navigation to the route.
+Hermes remains responsible for memory, profile behavior, skills, tools, and agent execution.
 
-### Citadel rebrand and personalization
+### Hermes-Backed Automations
 
-- Changed default app identity from Open WebUI to Citadel.
-- Updated backend title, startup banner, app constants, favicon/splash assets, and server connection error text.
-- Added Citadel icon assets.
-- Updated auth and sidebar presentation around the Citadel identity.
-- Added login background image personalization stored through user settings/local browser storage.
-- Added recent-login user shortcuts on the auth screen.
-- Updated model display naming so Hermes profile names are shown cleanly.
+- Moves Citadel Automations onto Hermes cron jobs.
+- Adds backend proxy support for list, create, edit, pause, resume, run, delete, and run-history actions.
+- Uses Hermes profiles instead of generic model selection when creating automations.
+- Stores automation origin metadata so Hermes can see which Citadel user created the work.
+- Shows running, paused, scheduled, completed, and failed states.
+- Shows last run, next run, run snippets, run content, filenames, and errors when Hermes provides them.
+- Polls running jobs so the UI updates after a manual run.
+- Removes Automations from the lower user menu and places it in the main sidebar.
+- Fixes earlier endpoint mismatches between `/api/cron` and Hermes `/api/crons` routes.
 
-### Navigation and feature overrides
+### Status Dashboard
 
-Citadel keeps most Open WebUI capability available, but a few pieces are intentionally overridden or hidden for this fork's current workflow:
+- Adds `/status` as a Citadel page.
+- Adds `/api/v1/status/summary` for app telemetry.
+- Adds sidebar navigation to Status.
+- Shows system health: CPU, RAM, and disk.
+- Shows skill usage gathered from Hermes usage files when available.
+- Shows sessions, messages, input tokens, output tokens, total tokens, and estimated cost.
+- Shows model breakdowns, token breakdowns, daily tokens, activity by day, and activity by hour.
+- Supports global admin view and user-scoped non-admin view.
+- Includes reorder controls for dashboard modules.
+- Fixes layout containment so Status no longer overlays folder or chat pages.
+- Fixes navigation so Status points to `/status` and chat/folder root stays usable.
 
-- Hermes-backed models are inserted ahead of OpenAI and Ollama models in the model list.
-- Chat routing checks Hermes models before falling through to Ollama/OpenAI-compatible routing.
-- Sidebar defaults now prioritize Chat, Status, Notes, and Automations.
-- Workspace navigation is disabled in the Citadel sidebar constants for now.
-- Global search navigation is disabled in the Citadel sidebar constants for now.
-- The new chat path is pointed at `/chat` so folder navigation and the chat root behave cleanly.
-- OpenAI direct catch-all passthrough remains disabled by default unless `ENABLE_OPENAI_API_PASSTHROUGH=True` is set.
-- OpenRouter request title branding now identifies the app as Citadel.
+### Branding and Personalization
+
+- Renames the visible app identity from Open WebUI to Citadel.
+- Adds `Citadel-Icon.png`.
+- Updates app title, startup banner, app constants, manifests, favicon, splash assets, and connection error text.
+- Replaces old Open WebUI icons in login, onboarding, sidebar, and missing-model/avatar contexts.
+- Adds a single Citadel home button in the sidebar.
+- Adds login background image personalization in user settings.
+- Adds recent login users on the auth screen with username-style quick selection.
+- Keeps user profile images where appropriate and uses user fallback images where that is clearer than the Citadel icon.
+
+### Navigation and Feature Overrides
+
+- Status, Chat, Notes, and Automations are prioritized in the sidebar.
+- Workspace navigation is disabled in the Citadel sidebar constants.
+- Global search navigation is disabled because it does not search Hermes memory directly and only sees synced chat rows.
+- New Chat routes to `/chat` to keep folder navigation clean.
+- Hermes-backed models are inserted before OpenAI and Ollama base models.
+- Chat routing checks Hermes models before falling through to retained Open WebUI provider paths.
+- OpenAI direct catch-all passthrough remains disabled by default unless explicitly enabled.
+- Citadel can still use retained Open WebUI features, but the default workflow is the localized Hermes agent workflow.
+
+### LAN Service Setup
+
+- Citadel is intended to run on the LAN for local browser and phone access.
+- The current machine uses a user service named `Citadel_Gates.service`.
+- Citadel listens on port `8080`.
+- Hermes listens separately on port `8787`.
+- The old Open WebUI service was disabled during Citadel setup so Citadel owns port `8080`.
+
+## Retained Open WebUI Features
+
+Citadel is a fork, not a total rewrite. These Open WebUI capabilities are still part of the base unless explicitly hidden, disabled, or superseded by Citadel/Hermes behavior:
+
+- Responsive web UI and progressive web app behavior.
+- Local-first self-hosting model.
+- Chat UI with markdown and LaTeX rendering.
+- File upload and document-assisted chat features.
+- Local RAG and document library foundations.
+- Web search and webpage ingestion support where configured.
+- Ollama and OpenAI-compatible provider support.
+- Image generation and editing provider support where configured.
+- Voice, STT, TTS, and call-related provider support where configured.
+- User accounts, roles, permissions, groups, and admin settings.
+- Notes, folders, tags, channels, calendar, and saved chats.
+- Function/tool/plugin foundations from Open WebUI.
+- SQLite/PostgreSQL-compatible data storage paths.
+- Redis/WebSocket/session support from the upstream architecture.
+- OAuth, LDAP, trusted-header auth, SCIM, and related enterprise auth foundations where configured.
+- Cloud storage and file picker foundations where configured.
+- OpenTelemetry/audit/logging foundations where configured.
+
+Some of these retained features may not be exposed in Citadel navigation yet. Citadel intentionally keeps the default UI focused on local agent operation.
+
+## Data Flow
+
+Citadel reads and writes from these main sources:
+
+- Citadel database: users, settings, chats, messages, permissions, token usage, and local app metadata.
+- Hermes HTTP service: health, profiles, sessions, skills, cron jobs, cron runs, and streamed agent responses.
+- Hermes home files: skill usage counters and cron data when exposed through Hermes or read locally for status summaries.
+- Model providers: Ollama, OpenAI-compatible APIs, or profile fallback providers depending on configuration.
+
+For Hermes chat:
+
+1. User selects a Citadel profile option backed by a Hermes profile.
+2. Citadel creates or reuses a mapped Hermes session for the user/profile/chat.
+3. Citadel sends the latest user message, optional attachments, optional fallback model, and small Citadel context to Hermes.
+4. Hermes starts the agent turn and returns a stream id.
+5. Citadel reads the Hermes stream and sends it to the browser as normal chat output.
+6. Citadel can sync Hermes sessions back into the chat list for reopening later.
+
+For Hermes automations:
+
+1. User creates or edits an automation in Citadel.
+2. Citadel sends the job to the correct Hermes profile through Hermes cron endpoints.
+3. Hermes owns scheduling and execution.
+4. Citadel reads job status and run history for display.
 
 ## Configuration
 
-Citadel expects a localized Hermes service to be reachable by the backend.
-
-Common Hermes environment variables:
+Common Citadel/Hermes environment variables:
 
 ```bash
 CITADEL_HERMES_BASE_URL=http://127.0.0.1:8787
 CITADEL_HERMES_PASSWORD=
 CITADEL_HERMES_TIMEOUT=600
 CITADEL_HERMES_SYNC_TIMEOUT=8
+HERMES_HOME=/home/edgesecure/.hermes
 ```
 
 Notes:
 
-- `CITADEL_HERMES_BASE_URL` points Citadel at the local Hermes HTTP service.
-- `CITADEL_HERMES_PASSWORD` is optional, but should match Hermes if that service requires login.
+- `CITADEL_HERMES_BASE_URL` points Citadel at the localized Hermes service.
+- `CITADEL_HERMES_PASSWORD` should match Hermes if Hermes auth is enabled.
 - `CITADEL_HERMES_TIMEOUT` controls longer chat/agent calls.
-- `CITADEL_HERMES_SYNC_TIMEOUT` controls shorter status/session sync calls.
-- `HERMES_HOME` can be set when the status dashboard should read Hermes skill usage from a non-default Hermes home. If unset, Citadel also checks `~/.hermes`.
+- `CITADEL_HERMES_SYNC_TIMEOUT` controls shorter sync/status calls.
+- `HERMES_HOME` is optional, but helps the Status page find local Hermes usage files.
 
-## Install and Run
+Useful inherited Open WebUI variables still apply where relevant:
 
-Citadel still follows the upstream Open WebUI development shape. The extra requirement is that Hermes should be running and reachable before you expect Hermes profiles, automations, and sessions to appear.
+```bash
+WEBUI_NAME=Citadel
+OLLAMA_BASE_URL=http://127.0.0.1:11434
+OPENAI_API_KEY=
+ENABLE_OPENAI_API=true
+ENABLE_OLLAMA_API=true
+ENABLE_OPENAI_API_PASSTHROUGH=false
+```
 
-### Local development
+## Install Guide
+
+### Prerequisites
+
+- Python 3.11 or 3.12.
+- Node.js 18 through 22.
+- npm.
+- Git.
+- A reachable Hermes service for Citadel agent features.
+- Ollama or OpenAI-compatible providers if your Hermes profiles or retained Open WebUI features use them.
+
+### Clone
+
+```bash
+cd /home/edgesecure
+git clone https://github.com/Denchyaknow/Citadel.git
+cd Citadel
+git remote add upstream https://github.com/open-webui/open-webui.git
+git fetch upstream
+```
+
+If the repo is already cloned:
 
 ```bash
 cd /home/edgesecure/Citadel
-npm install
+git fetch origin
+git fetch upstream
+```
+
+### Local Source Install
+
+```bash
+cd /home/edgesecure/Citadel
+python3.11 -m venv .venv
+source .venv/bin/activate
+pip install --upgrade pip
 pip install -e .
+npm install
+npm run build
+```
+
+Run Citadel:
+
+```bash
 export CITADEL_HERMES_BASE_URL=http://127.0.0.1:8787
+export CITADEL_HERMES_PASSWORD=''
 open-webui serve
 ```
 
-In another shell, run the frontend dev server when working on Svelte UI changes:
+Open:
+
+```text
+http://127.0.0.1:8080
+```
+
+For LAN use, bind to all interfaces through your service or server command and visit the host IP from another device:
+
+```text
+http://<lan-ip>:8080
+```
+
+### Development UI Server
+
+Use this only for frontend development:
 
 ```bash
 cd /home/edgesecure/Citadel
 npm run dev
 ```
 
-### Docker-style deployment
+The production-like Citadel service should use the built frontend. Do not leave the Vite dev server running as the main Citadel instance.
 
-Use the upstream Docker guidance below as the base. Add the Hermes variables to the Citadel container or compose service:
+### User Systemd Service
 
-```bash
-environment:
-  CITADEL_HERMES_BASE_URL: http://host.docker.internal:8787
-  CITADEL_HERMES_PASSWORD: ${CITADEL_HERMES_PASSWORD}
-  CITADEL_HERMES_TIMEOUT: "600"
-  CITADEL_HERMES_SYNC_TIMEOUT: "8"
+Example user service for LAN hosting:
+
+```ini
+[Unit]
+Description=Citadel Gates WebUI
+Documentation=file:/home/edgesecure/Citadel/README.md
+After=network-online.target
+
+[Service]
+WorkingDirectory=/home/edgesecure/Citadel/backend
+Environment=PYTHONPATH=/home/edgesecure/Citadel/backend
+Environment=CITADEL_HERMES_BASE_URL=http://127.0.0.1:8787
+Environment=CITADEL_HERMES_TIMEOUT=600
+Environment=CITADEL_HERMES_SYNC_TIMEOUT=8
+Environment=HERMES_HOME=/home/edgesecure/.hermes
+ExecStart=/home/edgesecure/Citadel/.venv/bin/python3 -m uvicorn open_webui.main:app --host 0.0.0.0 --port 8080 --forwarded-allow-ips "*" --workers 1
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=default.target
 ```
 
-If Hermes runs on the same Linux host as Docker, make sure the container can resolve and reach the host address you place in `CITADEL_HERMES_BASE_URL`.
-
-## Operational Notes
-
-- Refresh models after changing Hermes profiles so Citadel can rebuild the `hermes:<profile>` virtual model list.
-- Use `/api/v1/hermes/status` or the Status page to confirm Citadel can reach Hermes.
-- Use `/api/v1/hermes/sync` when Hermes sessions should be pulled into the Citadel chat list.
-- Automations in this fork are expected to come from Hermes cron jobs, not the old standalone Citadel automation storage path.
-- If the Status page reports that it received HTML or another non-JSON response, restart the Citadel backend so the `/api/v1/status/summary` route is loaded.
-
----
-
-## Original Open WebUI README
-
-# Open WebUI 👋
-
-![GitHub stars](https://img.shields.io/github/stars/open-webui/open-webui?style=social)
-![GitHub forks](https://img.shields.io/github/forks/open-webui/open-webui?style=social)
-![GitHub watchers](https://img.shields.io/github/watchers/open-webui/open-webui?style=social)
-![GitHub repo size](https://img.shields.io/github/repo-size/open-webui/open-webui)
-![GitHub language count](https://img.shields.io/github/languages/count/open-webui/open-webui)
-![GitHub top language](https://img.shields.io/github/languages/top/open-webui/open-webui)
-![GitHub last commit](https://img.shields.io/github/last-commit/open-webui/open-webui?color=red)
-[![Discord](https://img.shields.io/badge/Discord-Open_WebUI-blue?logo=discord&logoColor=white)](https://discord.gg/5rJgQTnV4s)
-[![](https://img.shields.io/static/v1?label=Sponsor&message=%E2%9D%A4&logo=GitHub&color=%23fe8e86)](https://github.com/sponsors/tjbck)
-
-![Open WebUI Banner](./banner.png)
-
-**Open WebUI is an [extensible](https://docs.openwebui.com/features/extensibility/plugin), feature-rich, and user-friendly self-hosted AI platform designed to operate entirely offline.** It supports various LLM runners like **Ollama** and **OpenAI-compatible APIs**, with **built-in inference engine** for RAG, making it a **powerful AI deployment solution**.
-
-Passionate about open-source AI? [Join our team →](https://careers.openwebui.com/)
-
-![Open WebUI Demo](./demo.png)
-
-> [!TIP]  
-> **Looking for an [Enterprise Plan](https://docs.openwebui.com/enterprise)?** – **[Speak with Our Sales Team Today!](https://docs.openwebui.com/enterprise)**
->
-> Get **enhanced capabilities**, including **custom theming and branding**, **Service Level Agreement (SLA) support**, **Long-Term Support (LTS) versions**, and **more!**
-
-For more information, be sure to check out our [Open WebUI Documentation](https://docs.openwebui.com/).
-
-## Key Features of Open WebUI ⭐
-
-- 🚀 **Effortless Setup**: Install seamlessly using Docker or Kubernetes (kubectl, kustomize or helm) for a hassle-free experience with support for both `:ollama` and `:cuda` tagged images.
-
-- 🤝 **Ollama/OpenAI API Integration**: Effortlessly integrate OpenAI-compatible APIs for versatile conversations alongside Ollama models. Customize the OpenAI API URL to link with **LMStudio, GroqCloud, Mistral, OpenRouter, and more**.
-
-- 🛡️ **Granular Permissions and User Groups**: By allowing administrators to create detailed user roles and permissions, we ensure a secure user environment. This granularity not only enhances security but also allows for customized user experiences, fostering a sense of ownership and responsibility amongst users.
-
-- 📱 **Responsive Design**: Enjoy a seamless experience across Desktop PC, Laptop, and Mobile devices.
-
-- 📱 **Progressive Web App (PWA) for Mobile**: Enjoy a native app-like experience on your mobile device with our PWA, providing offline access on localhost and a seamless user interface.
-
-- ✒️🔢 **Full Markdown and LaTeX Support**: Elevate your LLM experience with comprehensive Markdown and LaTeX capabilities for enriched interaction.
-
-- 🎤📹 **Hands-Free Voice/Video Call**: Experience seamless communication with integrated hands-free voice and video call features using multiple Speech-to-Text providers (Local Whisper, OpenAI, Deepgram, Azure) and Text-to-Speech engines (Azure, ElevenLabs, OpenAI, Transformers, WebAPI), allowing for dynamic and interactive chat environments.
-
-- 🛠️ **Model Builder**: Easily create Ollama models via the Web UI. Create and add custom characters/agents, customize chat elements, and import models effortlessly through [Open WebUI Community](https://openwebui.com/) integration.
-
-- 🐍 **Native Python Function Calling Tool**: Enhance your LLMs with built-in code editor support in the tools workspace. Bring Your Own Function (BYOF) by simply adding your pure Python functions, enabling seamless integration with LLMs.
-
-- 💾 **Persistent Artifact Storage**: Built-in key-value storage API for artifacts, enabling features like journals, trackers, leaderboards, and collaborative tools with both personal and shared data scopes across sessions.
-
-- 📚 **Local RAG Integration**: Dive into the future of chat interactions with groundbreaking Retrieval Augmented Generation (RAG) support using your choice of 9 vector databases and multiple content extraction engines (Tika, Docling, Document Intelligence, Mistral OCR, PaddleOCR-vl, External loaders). Load documents directly into chat or add files to your document library, effortlessly accessing them using the `#` command before a query.
-
-- 🔍 **Web Search for RAG**: Perform web searches using 15+ providers including `SearXNG`, `Google PSE`, `Brave Search`, `Kagi`, `Mojeek`, `Tavily`, `Perplexity`, `serpstack`, `serper`, `Serply`, `DuckDuckGo`, `SearchApi`, `SerpApi`, `Bing`, `Jina`, `Exa`, `Sougou`, `Azure AI Search`, and `Ollama Cloud`, injecting results directly into your chat experience.
-
-- 🌐 **Web Browsing Capability**: Seamlessly integrate websites into your chat experience using the `#` command followed by a URL. This feature allows you to incorporate web content directly into your conversations, enhancing the richness and depth of your interactions.
-
-- 🎨 **Image Generation & Editing Integration**: Create and edit images using multiple engines including OpenAI's DALL-E, Gemini, ComfyUI (local), and AUTOMATIC1111 (local), with support for both generation and prompt-based editing workflows.
-
-- ⚙️ **Many Models Conversations**: Effortlessly engage with various models simultaneously, harnessing their unique strengths for optimal responses. Enhance your experience by leveraging a diverse set of models in parallel.
-
-- 🔐 **Role-Based Access Control (RBAC)**: Ensure secure access with restricted permissions; only authorized individuals can access your Ollama, and exclusive model creation/pulling rights are reserved for administrators.
-
-- 🗄️ **Flexible Database & Storage Options**: Choose from SQLite (with optional encryption), PostgreSQL, or configure cloud storage backends (S3, Google Cloud Storage, Azure Blob Storage) for scalable deployments.
-
-- 🔍 **Advanced Vector Database Support**: Select from 9 vector database options including ChromaDB, PGVector, Qdrant, Milvus, Elasticsearch, OpenSearch, Pinecone, S3Vector, and Oracle 23ai for optimal RAG performance.
-
-- 🔐 **Enterprise Authentication**: Full support for LDAP/Active Directory integration, SCIM 2.0 automated provisioning, and SSO via trusted headers alongside OAuth providers. Enterprise-grade user and group provisioning through SCIM 2.0 protocol, enabling seamless integration with identity providers like Okta, Azure AD, and Google Workspace for automated user lifecycle management.
-
-- ☁️ **Cloud-Native Integration**: Native support for Google Drive and OneDrive/SharePoint file picking, enabling seamless document import from enterprise cloud storage.
-
-- 📊 **Production Observability**: Built-in OpenTelemetry support for traces, metrics, and logs, enabling comprehensive monitoring with your existing observability stack.
-
-- ⚖️ **Horizontal Scalability**: Redis-backed session management and WebSocket support for multi-worker and multi-node deployments behind load balancers.
-
-- 🌐🌍 **Multilingual Support**: Experience Open WebUI in your preferred language with our internationalization (i18n) support. Join us in expanding our supported languages! We're actively seeking contributors!
-
-- 🧩 **Pipelines, Open WebUI Plugin Support**: Seamlessly integrate custom logic and Python libraries into Open WebUI using [Pipelines Plugin Framework](https://github.com/open-webui/pipelines). Launch your Pipelines instance, set the OpenAI URL to the Pipelines URL, and explore endless possibilities. [Examples](https://github.com/open-webui/pipelines/tree/main/examples) include **Function Calling**, User **Rate Limiting** to control access, **Usage Monitoring** with tools like Langfuse, **Live Translation with LibreTranslate** for multilingual support, **Toxic Message Filtering** and much more.
-
-- 🌟 **Continuous Updates**: We are committed to improving Open WebUI with regular updates, fixes, and new features.
-
-Want to learn more about Open WebUI's features? Check out our [Open WebUI documentation](https://docs.openwebui.com/features) for a comprehensive overview!
-
----
-
-We are incredibly grateful for the generous support of our sponsors. Their contributions help us to maintain and improve our project, ensuring we can continue to deliver quality work to our community. Thank you!
-
-## How to Install 🚀
-
-### Installation via Python pip 🐍
-
-Open WebUI can be installed using pip, the Python package installer. Before proceeding, ensure you're using **Python 3.11** to avoid compatibility issues.
-
-1. **Install Open WebUI**:
-   Open your terminal and run the following command to install Open WebUI:
-
-   ```bash
-   pip install open-webui
-   ```
-
-2. **Running Open WebUI**:
-   After installation, you can start Open WebUI by executing:
-
-   ```bash
-   open-webui serve
-   ```
-
-This will start the Open WebUI server, which you can access at [http://localhost:8080](http://localhost:8080)
-
-### Quick Start with Docker 🐳
-
-> [!NOTE]  
-> Please note that for certain Docker environments, additional configurations might be needed. If you encounter any connection issues, our detailed guide on [Open WebUI Documentation](https://docs.openwebui.com/) is ready to assist you.
-
-> [!WARNING]
-> When using Docker to install Open WebUI, make sure to include the `-v open-webui:/app/backend/data` in your Docker command. This step is crucial as it ensures your database is properly mounted and prevents any loss of data.
-
-> [!TIP]  
-> If you wish to utilize Open WebUI with Ollama included or CUDA acceleration, we recommend utilizing our official images tagged with either `:cuda` or `:ollama`. To enable CUDA, you must install the [Nvidia CUDA container toolkit](https://docs.nvidia.com/dgx/nvidia-container-runtime-upgrade/) on your Linux/WSL system.
-
-### Installation with Default Configuration
-
-- **If Ollama is on your computer**, use this command:
-
-  ```bash
-  docker run -d -p 3000:8080 --add-host=host.docker.internal:host-gateway -v open-webui:/app/backend/data --name open-webui --restart always ghcr.io/open-webui/open-webui:main
-  ```
-
-- **If Ollama is on a Different Server**, use this command:
-
-  To connect to Ollama on another server, change the `OLLAMA_BASE_URL` to the server's URL:
-
-  ```bash
-  docker run -d -p 3000:8080 -e OLLAMA_BASE_URL=https://example.com -v open-webui:/app/backend/data --name open-webui --restart always ghcr.io/open-webui/open-webui:main
-  ```
-
-- **To run Open WebUI with Nvidia GPU support**, use this command:
-
-  ```bash
-  docker run -d -p 3000:8080 --gpus all --add-host=host.docker.internal:host-gateway -v open-webui:/app/backend/data --name open-webui --restart always ghcr.io/open-webui/open-webui:cuda
-  ```
-
-### Installation for OpenAI API Usage Only
-
-- **If you're only using OpenAI API**, use this command:
-
-  ```bash
-  docker run -d -p 3000:8080 -e OPENAI_API_KEY=your_secret_key -v open-webui:/app/backend/data --name open-webui --restart always ghcr.io/open-webui/open-webui:main
-  ```
-
-### Installing Open WebUI with Bundled Ollama Support
-
-This installation method uses a single container image that bundles Open WebUI with Ollama, allowing for a streamlined setup via a single command. Choose the appropriate command based on your hardware setup:
-
-- **With GPU Support**:
-  Utilize GPU resources by running the following command:
-
-  ```bash
-  docker run -d -p 3000:8080 --gpus=all -v ollama:/root/.ollama -v open-webui:/app/backend/data --name open-webui --restart always ghcr.io/open-webui/open-webui:ollama
-  ```
-
-- **For CPU Only**:
-  If you're not using a GPU, use this command instead:
-
-  ```bash
-  docker run -d -p 3000:8080 -v ollama:/root/.ollama -v open-webui:/app/backend/data --name open-webui --restart always ghcr.io/open-webui/open-webui:ollama
-  ```
-
-Both commands facilitate a built-in, hassle-free installation of both Open WebUI and Ollama, ensuring that you can get everything up and running swiftly.
-
-After installation, you can access Open WebUI at [http://localhost:3000](http://localhost:3000). Enjoy! 😄
-
-### Other Installation Methods
-
-We offer various installation alternatives, including non-Docker native installation methods, Docker Compose, Kustomize, and Helm. Visit our [Open WebUI Documentation](https://docs.openwebui.com/getting-started/) or join our [Discord community](https://discord.gg/5rJgQTnV4s) for comprehensive guidance.
-
-### Troubleshooting
-
-Encountering connection issues? Our [Open WebUI Documentation](https://docs.openwebui.com/troubleshooting/) has got you covered. For further assistance and to join our vibrant community, visit the [Open WebUI Discord](https://discord.gg/5rJgQTnV4s).
-
-#### Open WebUI: Server Connection Error
-
-If you're experiencing connection issues, it’s often due to the WebUI docker container not being able to reach the Ollama server at 127.0.0.1:11434 (host.docker.internal:11434) inside the container . Use the `--network=host` flag in your docker command to resolve this. Note that the port changes from 3000 to 8080, resulting in the link: `http://localhost:8080`.
-
-**Example Docker Command**:
+Install and start:
 
 ```bash
-docker run -d --network=host -v open-webui:/app/backend/data -e OLLAMA_BASE_URL=http://127.0.0.1:11434 --name open-webui --restart always ghcr.io/open-webui/open-webui:main
+mkdir -p ~/.config/systemd/user
+$EDITOR ~/.config/systemd/user/Citadel_Gates.service
+systemctl --user daemon-reload
+systemctl --user enable --now Citadel_Gates.service
+loginctl enable-linger "$USER"
 ```
 
-### Keeping Your Docker Installation Up-to-Date
-
-Check our Updating Guide available in our [Open WebUI Documentation](https://docs.openwebui.com/getting-started/updating).
-
-### Using the Dev Branch 🌙
-
-> [!WARNING]
-> The `:dev` branch contains the latest unstable features and changes. Use it at your own risk as it may have bugs or incomplete features.
-
-If you want to try out the latest bleeding-edge features and are okay with occasional instability, you can use the `:dev` tag like this:
+Check status:
 
 ```bash
-docker run -d -p 3000:8080 -v open-webui:/app/backend/data --name open-webui --add-host=host.docker.internal:host-gateway --restart always ghcr.io/open-webui/open-webui:dev
+systemctl --user status Citadel_Gates.service
+curl http://127.0.0.1:8080/health
 ```
 
-### Offline Mode
+### Docker-Style Deployment
 
-If you are running Open WebUI in an offline environment, you can set the `HF_HUB_OFFLINE` environment variable to `1` to prevent attempts to download models from the internet.
+Use the upstream Open WebUI Docker pattern as the base, but build from this Citadel fork so the Hermes bridge and Citadel UI changes are present:
+
+```yaml
+services:
+  citadel:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: citadel:local
+    ports:
+      - "8080:8080"
+    environment:
+      WEBUI_NAME: Citadel
+      CITADEL_HERMES_BASE_URL: http://host.docker.internal:8787
+      CITADEL_HERMES_PASSWORD: ${CITADEL_HERMES_PASSWORD}
+      CITADEL_HERMES_TIMEOUT: "600"
+      CITADEL_HERMES_SYNC_TIMEOUT: "8"
+    volumes:
+      - open-webui:/app/backend/data
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: always
+```
+
+Make sure the container can reach Hermes at `CITADEL_HERMES_BASE_URL`. If Hermes runs on the Docker host, `host.docker.internal` with `host-gateway` is usually the simplest Linux setup.
+
+## Updating
+
+Pull Citadel fork updates:
 
 ```bash
-export HF_HUB_OFFLINE=1
+cd /home/edgesecure/Citadel
+git pull origin main
+npm install
+npm run build
+source .venv/bin/activate
+pip install -e .
+systemctl --user restart Citadel_Gates.service
 ```
 
-## What's Next? 🌟
+Check for upstream Open WebUI updates:
 
-Discover upcoming features on our roadmap in the [Open WebUI Documentation](https://docs.openwebui.com/roadmap/).
+```bash
+cd /home/edgesecure/Citadel
+git fetch upstream
+git log --oneline main..upstream/main
+```
 
-## License 📜
+Merge upstream only when ready to resolve fork conflicts:
 
-This project contains code under multiple licenses. The current codebase includes components licensed under the Open WebUI License with an additional requirement to preserve the "Open WebUI" branding, as well as prior contributions under their respective original licenses. For a detailed record of license changes and the applicable terms for each section of the code, please refer to [LICENSE_HISTORY](./LICENSE_HISTORY). For complete and updated licensing details, please see the [LICENSE](./LICENSE) and [LICENSE_HISTORY](./LICENSE_HISTORY) files.
+```bash
+git checkout main
+git merge upstream/main
+npm install
+npm run build
+python3 -m py_compile backend/open_webui/utils/hermes.py backend/open_webui/routers/hermes.py backend/open_webui/routers/citadel_status.py
+git diff --check
+```
 
-## Support 💬
+## Operational Checks
 
-If you have any questions, suggestions, or need assistance, please open an issue or join our
-[Open WebUI Discord community](https://discord.gg/5rJgQTnV4s) to connect with us! 🤝
+Check Citadel:
 
-## Star History
+```bash
+curl http://127.0.0.1:8080/health
+systemctl --user status Citadel_Gates.service
+```
 
-<a href="https://star-history.com/#open-webui/open-webui&Date">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=open-webui/open-webui&type=Date&theme=dark" />
-    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=open-webui/open-webui&type=Date" />
-    <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=open-webui/open-webui&type=Date" />
-  </picture>
-</a>
+Check Hermes from Citadel's host:
 
----
+```bash
+curl http://127.0.0.1:8787/health
+```
 
-Created by [Timothy Jaeryang Baek](https://github.com/tjbck) - Let's make Open WebUI even more amazing together! 💪
+Check Citadel's Hermes proxy after login with an API token:
+
+```bash
+curl -H "Authorization: Bearer <token>" http://127.0.0.1:8080/api/v1/hermes/status
+curl -H "Authorization: Bearer <token>" http://127.0.0.1:8080/api/v1/hermes/profiles
+curl -H "Authorization: Bearer <token>" http://127.0.0.1:8080/api/v1/hermes/sessions
+```
+
+Sync Hermes sessions into Citadel:
+
+```bash
+curl -X POST -H "Authorization: Bearer <token>" http://127.0.0.1:8080/api/v1/hermes/sync
+```
+
+Check Status API:
+
+```bash
+curl -H "Authorization: Bearer <token>" "http://127.0.0.1:8080/api/v1/status/summary?days=30"
+```
+
+## Troubleshooting
+
+### Hermes profiles do not appear
+
+- Confirm Hermes is running.
+- Confirm `CITADEL_HERMES_BASE_URL` is reachable from Citadel.
+- Confirm `CITADEL_HERMES_PASSWORD` is correct if Hermes auth is enabled.
+- Restart Citadel after environment changes.
+- Refresh models in the UI.
+
+### Chat bypasses Hermes
+
+- Make sure the selected model id starts with `hermes:`.
+- Make sure Hermes profiles are loading.
+- Confirm `/api/v1/hermes/status` returns healthy data.
+- Confirm Citadel was restarted after the Hermes backend integration was deployed.
+
+### Automations return HTML or JSON parse errors
+
+- Restart `Citadel_Gates.service` so the Hermes automation routes are loaded.
+- Confirm the frontend was rebuilt with `npm run build`.
+- Confirm the browser is hitting port `8080`, not a stale Vite dev server.
+- Confirm Citadel routes use `/api/v1/automations/hermes/cron/...`.
+
+### Status page returns non-JSON
+
+- Restart Citadel so `/api/v1/status/summary` is loaded.
+- Confirm the frontend route is `/status`.
+- Confirm the backend route is reachable with an authenticated request.
+
+### LAN access does not work
+
+- Confirm Citadel is bound to `0.0.0.0`.
+- Confirm the LAN IP and port are correct.
+- Check firewall rules.
+- Check router or access point client isolation.
+
+## Attribution and License
+
+This fork inherits the upstream Open WebUI licensing structure. See [LICENSE](./LICENSE), [LICENSE_HISTORY](./LICENSE_HISTORY), and [LICENSE_NOTICE](./LICENSE_NOTICE).
