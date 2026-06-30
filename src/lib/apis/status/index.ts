@@ -45,11 +45,30 @@ export type StatusSummary = {
 };
 
 const parseApiResponse = async (res: Response) => {
+	const contentType = res.headers.get('content-type') ?? '';
 	const text = await res.text();
-	const data = text ? JSON.parse(text) : {};
+	let data: any = {};
+
+	if (text && contentType.includes('application/json')) {
+		try {
+			data = JSON.parse(text);
+		} catch {
+			throw new Error(`Invalid JSON response from Status API (${res.status})`);
+		}
+	} else if (text) {
+		data = { detail: text.trim() || res.statusText };
+	}
+
 	if (!res.ok) {
 		throw new Error(data?.detail ?? data?.error ?? res.statusText ?? `HTTP ${res.status}`);
 	}
+
+	if (!contentType.includes('application/json')) {
+		throw new Error(
+			`Status API returned ${contentType || 'unknown content type'} instead of JSON. Restart the Citadel backend so /api/v1/status/summary is loaded.`
+		);
+	}
+
 	return data;
 };
 
