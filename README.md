@@ -1,3 +1,155 @@
+# Citadel - EdgeSecure Research Fork
+
+EdgeSecure is forking this repo in the name of science.
+
+Citadel is an EdgeSecure-maintained research fork of [Open WebUI](https://github.com/open-webui/open-webui). The original upstream README is preserved below this section so the base project context, license notes, and general Open WebUI installation material stay intact. This top section documents the Citadel-specific changes added in the latest local commits.
+
+Upstream source: https://github.com/open-webui/open-webui
+
+Current fork source: https://github.com/Denchyaknow/Citadel
+
+---
+
+## Citadel Overview
+
+Citadel keeps the Open WebUI application foundation but bends the chat, automation, status, and branding layers toward EdgeSecure's localized Hermes agent environment. In practice, Citadel behaves like a local operator console: users interact with familiar chat and automation screens, while selected conversations and scheduled work are handed off to Hermes profiles running on the local network or host.
+
+The intent is not to expose every Hermes implementation detail in the UI. Citadel shows profiles, sessions, automations, status, and useful activity telemetry, then sends user requests and context to Hermes through a backend bridge.
+
+## Latest EdgeSecure Changes
+
+### Hermes agent integration
+
+- Added a backend Hermes client and router.
+- Added authenticated Citadel endpoints under `/api/v1/hermes` for health, profiles, sessions, sync, skills, and Hermes cron job operations.
+- Exposes Hermes profiles as virtual Citadel models named like `hermes:<profile>`.
+- Gives the model selector a Hermes profile picker and optional fallback model selector when a Hermes profile advertises fallback providers.
+- Routes chats for Hermes-owned models through Hermes instead of sending them directly to Ollama or an OpenAI-compatible provider.
+- Converts Hermes streaming responses back into OpenAI-compatible chat chunks so the existing chat UI can render them normally.
+- Stores Citadel chat to Hermes session continuity in `DATA_DIR/citadel_hermes_sessions.json`.
+- Syncs Hermes session records into the Citadel chat list as lightweight chat rows so prior Hermes sessions can be reopened from Citadel.
+
+### Localized Hermes data flow
+
+At a high level, Citadel gets data from three places:
+
+- Citadel's own database for users, chats, messages, tokens, costs, and app settings.
+- The localized Hermes service for agent profiles, active sessions, skills, cron jobs, and streamed agent responses.
+- Local host or Hermes usage files for status dashboard details such as CPU, memory, disk, and skill usage counters.
+
+When a user selects a Hermes profile and sends a chat message, Citadel creates or reuses a Hermes session for that user/profile/chat combination. Citadel sends the latest user message, selected profile, optional fallback model, attachments when present, and a small `citadel_context` block that identifies the source as Citadel and includes user/chat/folder/workspace metadata. Hermes returns a stream id, Citadel reads the Hermes stream, and the response is delivered back to the browser through the normal chat streaming path.
+
+This keeps Citadel responsible for the web app and user workflow while Hermes remains responsible for localized agent behavior, profile selection, memory, skills, and tool execution.
+
+### Hermes-backed automations
+
+- Reworked the automations API client to use Hermes cron jobs.
+- Added backend proxy routes for listing, creating, editing, pausing, resuming, triggering, deleting, and inspecting Hermes cron jobs.
+- Added profile-aware automation records so scheduled work belongs to a Hermes profile.
+- Added run history support with status, run previews, filenames, errors, and running-state refresh.
+- Updated automation filters to include running and completed states.
+- Preserved the Citadel permission checks around automations before allowing access to Hermes-backed job controls.
+
+### Status dashboard
+
+- Added a new Citadel status route at `/status`.
+- Added a backend summary endpoint at `/api/v1/status/summary`.
+- Shows system health, skill usage, session counts, message counts, token totals, estimated costs, daily token activity, model breakdowns, and activity by day/hour.
+- Supports user-scoped data for normal users and global data for admins.
+- Handles non-JSON or stale backend responses with clearer restart guidance.
+- Keeps the status page inside the main app layout and points sidebar navigation to the route.
+
+### Citadel rebrand and personalization
+
+- Changed default app identity from Open WebUI to Citadel.
+- Updated backend title, startup banner, app constants, favicon/splash assets, and server connection error text.
+- Added Citadel icon assets.
+- Updated auth and sidebar presentation around the Citadel identity.
+- Added login background image personalization stored through user settings/local browser storage.
+- Added recent-login user shortcuts on the auth screen.
+- Updated model display naming so Hermes profile names are shown cleanly.
+
+### Navigation and feature overrides
+
+Citadel keeps most Open WebUI capability available, but a few pieces are intentionally overridden or hidden for this fork's current workflow:
+
+- Hermes-backed models are inserted ahead of OpenAI and Ollama models in the model list.
+- Chat routing checks Hermes models before falling through to Ollama/OpenAI-compatible routing.
+- Sidebar defaults now prioritize Chat, Status, Notes, and Automations.
+- Workspace navigation is disabled in the Citadel sidebar constants for now.
+- Global search navigation is disabled in the Citadel sidebar constants for now.
+- The new chat path is pointed at `/chat` so folder navigation and the chat root behave cleanly.
+- OpenAI direct catch-all passthrough remains disabled by default unless `ENABLE_OPENAI_API_PASSTHROUGH=True` is set.
+- OpenRouter request title branding now identifies the app as Citadel.
+
+## Configuration
+
+Citadel expects a localized Hermes service to be reachable by the backend.
+
+Common Hermes environment variables:
+
+```bash
+CITADEL_HERMES_BASE_URL=http://127.0.0.1:8787
+CITADEL_HERMES_PASSWORD=
+CITADEL_HERMES_TIMEOUT=600
+CITADEL_HERMES_SYNC_TIMEOUT=8
+```
+
+Notes:
+
+- `CITADEL_HERMES_BASE_URL` points Citadel at the local Hermes HTTP service.
+- `CITADEL_HERMES_PASSWORD` is optional, but should match Hermes if that service requires login.
+- `CITADEL_HERMES_TIMEOUT` controls longer chat/agent calls.
+- `CITADEL_HERMES_SYNC_TIMEOUT` controls shorter status/session sync calls.
+- `HERMES_HOME` can be set when the status dashboard should read Hermes skill usage from a non-default Hermes home. If unset, Citadel also checks `~/.hermes`.
+
+## Install and Run
+
+Citadel still follows the upstream Open WebUI development shape. The extra requirement is that Hermes should be running and reachable before you expect Hermes profiles, automations, and sessions to appear.
+
+### Local development
+
+```bash
+cd /home/edgesecure/Citadel
+npm install
+pip install -e .
+export CITADEL_HERMES_BASE_URL=http://127.0.0.1:8787
+open-webui serve
+```
+
+In another shell, run the frontend dev server when working on Svelte UI changes:
+
+```bash
+cd /home/edgesecure/Citadel
+npm run dev
+```
+
+### Docker-style deployment
+
+Use the upstream Docker guidance below as the base. Add the Hermes variables to the Citadel container or compose service:
+
+```bash
+environment:
+  CITADEL_HERMES_BASE_URL: http://host.docker.internal:8787
+  CITADEL_HERMES_PASSWORD: ${CITADEL_HERMES_PASSWORD}
+  CITADEL_HERMES_TIMEOUT: "600"
+  CITADEL_HERMES_SYNC_TIMEOUT: "8"
+```
+
+If Hermes runs on the same Linux host as Docker, make sure the container can resolve and reach the host address you place in `CITADEL_HERMES_BASE_URL`.
+
+## Operational Notes
+
+- Refresh models after changing Hermes profiles so Citadel can rebuild the `hermes:<profile>` virtual model list.
+- Use `/api/v1/hermes/status` or the Status page to confirm Citadel can reach Hermes.
+- Use `/api/v1/hermes/sync` when Hermes sessions should be pulled into the Citadel chat list.
+- Automations in this fork are expected to come from Hermes cron jobs, not the old standalone Citadel automation storage path.
+- If the Status page reports that it received HTML or another non-JSON response, restart the Citadel backend so the `/api/v1/status/summary` route is loaded.
+
+---
+
+## Original Open WebUI README
+
 # Open WebUI 👋
 
 ![GitHub stars](https://img.shields.io/github/stars/open-webui/open-webui?style=social)
