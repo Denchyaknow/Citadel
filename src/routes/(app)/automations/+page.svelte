@@ -73,6 +73,8 @@
 			const res = await getAutomationItems(localStorage.token, query, statusFilter, page).catch(
 				(error) => {
 					toast.error(`${error}`);
+					automations = [];
+					total = 0;
 					return null;
 				}
 			);
@@ -89,7 +91,11 @@
 	};
 
 	const toggleHandler = async (automation: AutomationResponse) => {
-		const res = await toggleAutomationById(localStorage.token, automation.id).catch((err) => {
+		const res = await toggleAutomationById(
+			localStorage.token,
+			automation.id,
+			automation.is_active
+		).catch((err: unknown) => {
 			toast.error(`${err}`);
 			return null;
 		});
@@ -108,7 +114,7 @@
 		);
 
 		try {
-			await Promise.all(targets.map((a) => toggleAutomationById(localStorage.token, a.id)));
+			await Promise.all(targets.map((a) => toggleAutomationById(localStorage.token, a.id, enable)));
 		} catch (err) {
 			toast.error(`${err}`);
 			// Refresh from server to restore consistent state
@@ -123,6 +129,7 @@
 		});
 		if (res) {
 			toast.success($i18n.t('Automation triggered'));
+			getAutomationList();
 		}
 	};
 
@@ -139,64 +146,47 @@
 		getAutomationList();
 	};
 
-	const formatRRule = (rrule: string): string => {
-		// Detect one-time schedule (ONCE)
-		if (rrule.includes('COUNT=1')) {
-			const match = rrule.match(/DTSTART:(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})/);
-			if (match) {
-				const d = new Date(`${match[1]}-${match[2]}-${match[3]}T${match[4]}:${match[5]}`);
-				return `Once · ${d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} ${d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })}`;
+	const formatDateTime = (value: string | number | null | undefined): string => {
+		if (!value) return $i18n.t('Never');
+		const numeric = typeof value === 'number' ? value : Number(value);
+		const date =
+			typeof value === 'number' || !Number.isNaN(numeric)
+				? new Date(numeric > 10_000_000_000 ? numeric / 1_000_000 : numeric * 1000)
+				: new Date(value);
+		if (Number.isNaN(date.getTime())) return `${value}`;
+		return date.toLocaleString(undefined, {
+			month: 'short',
+			day: 'numeric',
+			hour: 'numeric',
+			minute: '2-digit'
+		});
+	};
+
+	const formatSchedule = (automation: AutomationResponse): string => {
+		return automation.schedule_display || automation.data.schedule || $i18n.t('Not scheduled');
+	};
+
+	const stateLabel = (automation: AutomationResponse): string => {
+		if (automation.running) return $i18n.t('Running');
+		if (!automation.is_active) return $i18n.t('Paused');
+		if (automation.state === 'completed') return $i18n.t('Completed');
+		return $i18n.t('Active');
+	};
+
+	onMount(() => {
+		(async () => {
+			if (
+				!$config?.features?.enable_automations ||
+				($user?.role !== 'admin' && !($user?.permissions?.features?.automations ?? false))
+			) {
+				goto('/');
+				return;
 			}
-			return 'Once';
-		}
-		const parts: Record<string, string> = {};
-		rrule
-			.replace('RRULE:', '')
-			.split(';')
-			.forEach((p) => {
-				const [k, v] = p.split('=');
-				if (k && v) parts[k] = v;
-			});
-		const freq = parts.FREQ || '';
-		const hour = parseInt(parts.BYHOUR || '0');
-		const min = (parts.BYMINUTE || '0').padStart(2, '0');
-		const iv = parseInt(parts.INTERVAL || '1');
-		const ampm = hour >= 12 ? 'PM' : 'AM';
-		const h12 = hour % 12 || 12;
-		const time = `${h12}:${min} ${ampm}`;
 
-		if (freq === 'MINUTELY') return iv === 1 ? 'Every minute' : `Every ${iv} minutes`;
-		if (freq === 'HOURLY') return iv === 1 ? 'Hourly' : `Every ${iv} hours`;
-		if (freq === 'DAILY') return `Daily at ${time}`;
-		if (freq === 'WEEKLY') {
-			const days = parts.BYDAY || '';
-			return days ? `${days} at ${time}` : `Weekly at ${time}`;
-		}
-		if (freq === 'MONTHLY')
-			return `Monthly on the ${parts.BYMONTHDAY || '1'}${ordinal(parts.BYMONTHDAY || '1')} at ${time}`;
-		return rrule;
-	};
-
-	const ordinal = (n: string): string => {
-		const num = parseInt(n);
-		if (num % 10 === 1 && num !== 11) return 'st';
-		if (num % 10 === 2 && num !== 12) return 'nd';
-		if (num % 10 === 3 && num !== 13) return 'rd';
-		return 'th';
-	};
-
-	onMount(async () => {
-		if (
-			!$config?.features?.enable_automations ||
-			($user?.role !== 'admin' && !($user?.permissions?.features?.automations ?? false))
-		) {
-			goto('/');
-			return;
-		}
-
-		loaded = true;
-		// Explicit initial fetch — reactive blocks will handle subsequent changes
-		await getAutomationList();
+			loaded = true;
+			// Explicit initial fetch — reactive blocks will handle subsequent changes
+			await getAutomationList();
+		})();
 
 		return () => {
 			clearTimeout(searchDebounceTimer);
@@ -326,7 +316,9 @@
 								items={[
 									{ value: 'all', label: $i18n.t('All') },
 									{ value: 'active', label: $i18n.t('Active') },
-									{ value: 'paused', label: $i18n.t('Paused') }
+									{ value: 'running', label: $i18n.t('Running') },
+									{ value: 'paused', label: $i18n.t('Paused') },
+									{ value: 'completed', label: $i18n.t('Completed') }
 								]}
 								onChange={() => {
 									page = 1;
@@ -421,7 +413,15 @@
 									<div class="flex-1">
 										<div class="line-clamp-1 text-sm">{automation.name}</div>
 										<div class="text-xs text-gray-500 line-clamp-1">
-											{formatRRule(automation.data.rrule)}
+											{automation.profile} · {formatSchedule(automation)}
+										</div>
+										<div class="text-[11px] text-gray-400 line-clamp-1">
+											{stateLabel(automation)}
+											· {$i18n.t('Last ran')}: {formatDateTime(automation.last_run_at)}
+											· {$i18n.t('Next run')}: {formatDateTime(automation.next_run_at)}
+											{#if automation.last_status}
+												· {automation.last_status}
+											{/if}
 										</div>
 									</div>
 
@@ -468,9 +468,9 @@
 							{/each}
 						</div>
 
-						{#if total > 30}
+						{#if (total ?? 0) > 30}
 							<div class="flex justify-center mt-4 mb-2">
-								<Pagination bind:page count={total} perPage={30} />
+								<Pagination bind:page count={total ?? 0} perPage={30} />
 							</div>
 						{/if}
 					{/if}

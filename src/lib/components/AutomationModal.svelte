@@ -7,7 +7,7 @@
 	import Spinner from '$lib/components/common/Spinner.svelte';
 
 	import ScheduleDropdown from '$lib/components/automations/ScheduleDropdown.svelte';
-	import ModelDropdown from '$lib/components/automations/ModelDropdown.svelte';
+	import HermesProfileDropdown from '$lib/components/automations/HermesProfileDropdown.svelte';
 
 	import {
 		createAutomation,
@@ -24,7 +24,7 @@
 
 	let name = '';
 	let prompt = '';
-	let model_id = '';
+	let profile = '';
 	let is_active = true;
 
 	let loading = false;
@@ -33,8 +33,8 @@
 	let scheduleDropdown: ScheduleDropdown;
 
 	const submitHandler = async () => {
-		if (!name.trim() || !prompt.trim() || !model_id.trim()) {
-			toast.error($i18n.t('Name, prompt, and model are required'));
+		if (!name.trim() || !prompt.trim() || !profile.trim()) {
+			toast.error($i18n.t('Name, prompt, and profile are required'));
 			return;
 		}
 		if (scheduleDropdown?.frequency === 'ONCE') {
@@ -50,8 +50,8 @@
 				name: name.trim(),
 				data: {
 					prompt: prompt.trim(),
-					model_id: model_id.trim(),
-					rrule: scheduleDropdown.buildRrule()
+					profile: profile.trim(),
+					schedule: scheduleDropdown.buildScheduleString()
 				},
 				is_active
 			};
@@ -68,7 +68,7 @@
 				dispatch('save', { id: created?.id });
 			}
 		} catch (e: any) {
-			toast.error(e?.detail ?? `${e}` ?? 'Failed to save');
+			toast.error(e?.detail ?? `${e || 'Failed to save'}`);
 		} finally {
 			loading = false;
 		}
@@ -78,15 +78,15 @@
 		if (automation) {
 			name = automation.name;
 			prompt = automation.data.prompt;
-			model_id = automation.data.model_id;
+			profile = automation.data.profile;
 			is_active = automation.is_active;
 			if (scheduleDropdown) {
-				scheduleDropdown.parseRrule(automation.data.rrule);
+				scheduleDropdown.parseSchedule(automation.data.schedule);
 			}
 		} else {
 			name = '';
 			prompt = '';
-			model_id = '';
+			profile = '';
 			is_active = true;
 		}
 	};
@@ -131,7 +131,7 @@
 			<div class="flex items-center gap-0.5 flex-wrap flex-1 min-w-0">
 				<ScheduleDropdown bind:this={scheduleDropdown} side="top" align="start" />
 
-				<ModelDropdown bind:model_id side="top" align="start" />
+				<HermesProfileDropdown bind:profile side="top" align="start" />
 			</div>
 
 			<div class="flex items-center gap-2 shrink-0">

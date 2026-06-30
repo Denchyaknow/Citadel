@@ -14,7 +14,7 @@
 	export let monthDay = 1;
 	export let onceDate = '';
 	export let onceTime = '09:00';
-	export let customRrule = '';
+	export let customSchedule = '';
 
 	export let side: 'top' | 'bottom' = 'top';
 	export let align: 'start' | 'end' = 'start';
@@ -58,50 +58,111 @@
 
 	$: {
 		if (frequency === 'CUSTOM' && prevFrequency !== 'CUSTOM') {
-			customRrule = buildVisualRrule();
+			customSchedule = buildVisualRrule();
 		}
 		prevFrequency = frequency;
 	}
 
-	const buildVisualRrule = (): string => {
-		if (lastVisualFrequency === 'ONCE') {
-			const dt = onceDate.replace(/-/g, '') + 'T' + onceTime.replace(/:/g, '') + '00';
-			return `DTSTART:${dt}\nRRULE:FREQ=DAILY;COUNT=1`;
-		}
-		let parts = [`FREQ=${lastVisualFrequency}`];
-		if (interval > 1) parts.push(`INTERVAL=${interval}`);
-		if (lastVisualFrequency === 'WEEKLY' && selectedDays.length) {
-			parts.push(`BYDAY=${selectedDays.join(',')}`);
-		}
-		if (lastVisualFrequency === 'MONTHLY') {
-			parts.push(`BYMONTHDAY=${monthDay}`);
-		}
-		if (['DAILY', 'WEEKLY', 'MONTHLY'].includes(lastVisualFrequency)) {
-			parts.push(`BYHOUR=${hour}`);
-		}
-		parts.push(`BYMINUTE=${minute}`);
-		return `RRULE:${parts.join(';')}`;
+	const dayToCron: Record<string, string> = {
+		SU: '0',
+		MO: '1',
+		TU: '2',
+		WE: '3',
+		TH: '4',
+		FR: '5',
+		SA: '6'
 	};
 
+	const cronToDay: Record<string, string> = {
+		'0': 'SU',
+		'7': 'SU',
+		'1': 'MO',
+		'2': 'TU',
+		'3': 'WE',
+		'4': 'TH',
+		'5': 'FR',
+		'6': 'SA'
+	};
+
+	const buildVisualRrule = (): string => {
+		return buildSchedule(lastVisualFrequency);
+	};
+
+	const buildSchedule = (targetFrequency = frequency): string => {
+		if (targetFrequency === 'CUSTOM') return customSchedule;
+		if (targetFrequency === 'ONCE') {
+			return `${onceDate}T${onceTime}:00`;
+		}
+		if (targetFrequency === 'HOURLY') {
+			return interval > 1 ? `every ${interval}h` : 'every 1h';
+		}
+		if (targetFrequency === 'DAILY') {
+			return `${minute} ${hour} * * *`;
+		}
+		if (targetFrequency === 'WEEKLY') {
+			const days = selectedDays.length ? selectedDays : ['MO'];
+			return `${minute} ${hour} * * ${days.map((day) => dayToCron[day] ?? day).join(',')}`;
+		}
+		if (targetFrequency === 'MONTHLY') {
+			return `${minute} ${hour} ${monthDay} * *`;
+		}
+		return customSchedule;
+	};
+
+	export const buildScheduleString = (): string => buildSchedule();
+
 	export const buildRrule = (): string => {
-		if (frequency === 'CUSTOM') return customRrule;
-		if (frequency === 'ONCE') {
-			const dt = onceDate.replace(/-/g, '') + 'T' + onceTime.replace(/:/g, '') + '00';
-			return `DTSTART:${dt}\nRRULE:FREQ=DAILY;COUNT=1`;
+		return buildSchedule();
+	};
+
+	export const parseSchedule = (s: string) => {
+		const value = (s ?? '').trim();
+		if (!value) return;
+
+		const isoMatch = value.match(/^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2})(?::\d{2})?/);
+		if (isoMatch) {
+			frequency = 'ONCE';
+			onceDate = isoMatch[1];
+			onceTime = isoMatch[2];
+			return;
 		}
-		let parts = [`FREQ=${frequency}`];
-		if (interval > 1) parts.push(`INTERVAL=${interval}`);
-		if (frequency === 'WEEKLY' && selectedDays.length) {
-			parts.push(`BYDAY=${selectedDays.join(',')}`);
+
+		const everyMatch = value.match(/^every\s+(\d+)\s*h/i);
+		if (everyMatch) {
+			frequency = 'HOURLY';
+			interval = parseInt(everyMatch[1] || '1');
+			return;
 		}
-		if (frequency === 'MONTHLY') {
-			parts.push(`BYMONTHDAY=${monthDay}`);
+
+		const cronParts = value.split(/\s+/);
+		if (cronParts.length === 5) {
+			const [minutePart, hourPart, dayPart, monthPart, weekPart] = cronParts;
+			const parsedMinute = parseInt(minutePart);
+			const parsedHour = parseInt(hourPart);
+			if (!Number.isNaN(parsedMinute)) minute = parsedMinute;
+			if (!Number.isNaN(parsedHour)) hour = parsedHour;
+
+			if (dayPart === '*' && monthPart === '*' && weekPart === '*') {
+				frequency = 'DAILY';
+				return;
+			}
+			if (dayPart === '*' && monthPart === '*' && weekPart !== '*') {
+				frequency = 'WEEKLY';
+				selectedDays = weekPart
+					.split(',')
+					.map((day) => cronToDay[day] ?? day)
+					.filter(Boolean);
+				return;
+			}
+			if (dayPart !== '*' && monthPart === '*' && weekPart === '*') {
+				frequency = 'MONTHLY';
+				const parsedDay = parseInt(dayPart);
+				if (!Number.isNaN(parsedDay)) monthDay = parsedDay;
+				return;
+			}
 		}
-		if (['DAILY', 'WEEKLY', 'MONTHLY'].includes(frequency)) {
-			parts.push(`BYHOUR=${hour}`);
-		}
-		parts.push(`BYMINUTE=${minute}`);
-		return `RRULE:${parts.join(';')}`;
+
+		parseRrule(value);
 	};
 
 	export const parseRrule = (s: string) => {
@@ -125,7 +186,7 @@
 		const freq = parts.FREQ || 'DAILY';
 		if (!['HOURLY', 'DAILY', 'WEEKLY', 'MONTHLY'].includes(freq)) {
 			frequency = 'CUSTOM';
-			customRrule = s;
+			customSchedule = s;
 			return;
 		}
 		frequency = freq;
@@ -215,8 +276,8 @@
 			<div class="px-2 pb-2">
 				<input
 					type="text"
-					bind:value={customRrule}
-					placeholder="RRULE:FREQ=DAILY;BYHOUR=9;BYMINUTE=0"
+					bind:value={customSchedule}
+					placeholder="every 30m, 0 9 * * *, or 2026-01-15T09:00:00"
 					class="w-full bg-transparent outline-hidden text-xs placeholder:text-gray-400 dark:placeholder:text-gray-600"
 					on:click={(e) => e.stopPropagation()}
 					on:input={onChange}

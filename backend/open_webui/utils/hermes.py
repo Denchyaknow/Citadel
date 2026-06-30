@@ -93,29 +93,46 @@ async def _session() -> aiohttp.ClientSession:
     return session
 
 
+async def _hermes_json_with_session(
+    session: aiohttp.ClientSession,
+    method: str,
+    path: str,
+    *,
+    request_timeout: float | None = None,
+    **kwargs,
+) -> Any:
+    if request_timeout is not None:
+        kwargs['timeout'] = aiohttp.ClientTimeout(total=request_timeout, connect=min(request_timeout, 3))
+    async with session.request(
+        method,
+        f'{HERMES_BASE_URL}{path}',
+        headers={'User-Agent': 'Citadel-Backend/1.0', **kwargs.pop('headers', {})},
+        **kwargs,
+    ) as response:
+        text = await response.text()
+        if response.status >= 400:
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail=f'Agent service {path} failed: HTTP {response.status} {text[:400]}',
+            )
+        if not text:
+            return {}
+        try:
+            return json.loads(text)
+        except json.JSONDecodeError:
+            return {'text': text}
+
+
 async def hermes_json(method: str, path: str, *, request_timeout: float | None = None, **kwargs) -> Any:
     session = await _session()
     try:
-        if request_timeout is not None:
-            kwargs['timeout'] = aiohttp.ClientTimeout(total=request_timeout, connect=min(request_timeout, 3))
-        async with session.request(
+        return await _hermes_json_with_session(
+            session,
             method,
-            f'{HERMES_BASE_URL}{path}',
-            headers={'User-Agent': 'Citadel-Backend/1.0', **kwargs.pop('headers', {})},
+            path,
+            request_timeout=request_timeout,
             **kwargs,
-        ) as response:
-            text = await response.text()
-            if response.status >= 400:
-                raise HTTPException(
-                    status_code=status.HTTP_502_BAD_GATEWAY,
-                    detail=f'Agent service {path} failed: HTTP {response.status} {text[:400]}',
-                )
-            if not text:
-                return {}
-            try:
-                return json.loads(text)
-            except json.JSONDecodeError:
-                return {'text': text}
+        )
     finally:
         await session.close()
 
@@ -142,6 +159,293 @@ async def hermes_session(session_id: str, *, request_timeout: float | None = Non
 
 async def hermes_skills() -> dict[str, Any]:
     return await hermes_json('GET', '/api/skills')
+
+
+def _cron_job_id(job: dict[str, Any]) -> str:
+    return str(job.get('id') or job.get('job_id') or '').strip()
+
+
+def _normalize_cron_job(job: dict[str, Any], profile: str | None = None, running: bool = False) -> dict[str, Any]:
+    item = dict(job or {})
+    job_id = _cron_job_id(item)
+    state = str(item.get('state') or '').strip()
+    item['id'] = job_id
+    item['job_id'] = job_id
+    item['profile'] = str(item.get('profile') or profile or 'default')
+    item['profile_name'] = item['profile']
+    item['enabled'] = item.get('enabled') is not False and state != 'paused'
+    item['running'] = bool(running)
+    item['state'] = 'running' if running else (state or ('paused' if not item['enabled'] else 'scheduled'))
+    item['last_status'] = 'running' if running else item.get('last_status') or (
+        'error' if item.get('last_error') or item.get('consecutive_failures') else None
+    )
+    item['schedule_display'] = item.get('schedule_display') or item.get('schedule')
+    return item
+
+
+async def _hermes_cron_running_status(
+    session: aiohttp.ClientSession,
+    job_id: str,
+) -> tuple[bool, float | None]:
+    status_data = await _hermes_json_with_session(
+        session,
+        'GET',
+        f'/api/crons/status?job_id={quote(job_id, safe="")}',
+    )
+    if not isinstance(status_data, dict):
+        return False, None
+    return bool(status_data.get('running')), status_data.get('elapsed')
+
+
+async def _normalize_cron_run(
+    session: aiohttp.ClientSession,
+    job_id: str,
+    run: dict[str, Any],
+) -> dict[str, Any]:
+    filename = str(run.get('filename') or '').strip()
+    modified = run.get('modified')
+    created_at = modified if modified is not None else run.get('created_at') or run.get('started_at')
+    item = {
+        **run,
+        'id': filename or run.get('id') or run.get('session_id') or f'{job_id}-{created_at or ""}',
+        'job_id': job_id,
+        'status': run.get('status') or ('error' if run.get('error') else 'success'),
+        'created_at': created_at,
+        'started_at': run.get('started_at') or created_at,
+        'ended_at': run.get('ended_at') or created_at,
+        'error': run.get('error'),
+        'content': run.get('content'),
+        'snippet': run.get('snippet'),
+        'usage': run.get('usage') or {},
+    }
+    if filename and not item.get('snippet') and not item.get('content'):
+        try:
+            detail = await _hermes_json_with_session(
+                session,
+                'GET',
+                f'/api/crons/run?job_id={quote(job_id, safe="")}&filename={quote(filename, safe="")}',
+                request_timeout=15,
+            )
+            if isinstance(detail, dict):
+                item['content'] = detail.get('content')
+                item['snippet'] = detail.get('snippet')
+                item['usage'] = detail.get('usage') or item['usage']
+        except HTTPException:
+            log.debug('Unable to fetch Hermes cron run detail for %s/%s', job_id, filename, exc_info=True)
+    return item
+
+
+async def _hermes_switch_profile(session: aiohttp.ClientSession, profile: str | None) -> None:
+    target = (profile or 'default').strip() or 'default'
+    await _hermes_json_with_session(
+        session,
+        'POST',
+        '/api/profile/switch',
+        json={'name': target},
+    )
+
+
+async def _hermes_profile_names(session: aiohttp.ClientSession) -> list[str]:
+    data = await _hermes_json_with_session(session, 'GET', '/api/profiles')
+    names = []
+    for profile in data.get('profiles', []) if isinstance(data, dict) else []:
+        name = _profile_name(profile)
+        if name:
+            names.append(name)
+    return sorted(set(names or ['default']))
+
+
+async def _hermes_cron_jobs_for_profile(session: aiohttp.ClientSession, profile: str) -> list[dict[str, Any]]:
+    await _hermes_switch_profile(session, profile)
+    data = await _hermes_json_with_session(session, 'GET', '/api/crons')
+    status_data = await _hermes_json_with_session(session, 'GET', '/api/crons/status')
+    running = status_data.get('running', {}) if isinstance(status_data, dict) else {}
+    jobs = data.get('jobs', []) if isinstance(data, dict) else []
+    return [
+        _normalize_cron_job(job, profile=profile, running=_cron_job_id(job) in running)
+        for job in jobs
+        if isinstance(job, dict)
+    ]
+
+
+async def hermes_cron_jobs(profile: str = 'all') -> Any:
+    session = await _session()
+    try:
+        if (profile or 'all') == 'all':
+            jobs: list[dict[str, Any]] = []
+            for name in await _hermes_profile_names(session):
+                jobs.extend(await _hermes_cron_jobs_for_profile(session, name))
+            return {'jobs': jobs}
+        return {'jobs': await _hermes_cron_jobs_for_profile(session, profile or 'default')}
+    finally:
+        await session.close()
+
+
+async def hermes_cron_job(job_id: str, profile: str | None = None) -> Any:
+    session = await _session()
+    try:
+        for job in await _hermes_cron_jobs_for_profile(session, profile or 'default'):
+            if _cron_job_id(job) == str(job_id):
+                return job
+    finally:
+        await session.close()
+    raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Job not found')
+
+
+async def hermes_cron_job_runs(job_id: str, profile: str | None = None, limit: int = 20) -> Any:
+    session = await _session()
+    try:
+        await _hermes_switch_profile(session, profile or 'default')
+        running, elapsed = await _hermes_cron_running_status(session, job_id)
+        data = await _hermes_json_with_session(
+            session,
+            'GET',
+            f'/api/crons/history?job_id={quote(job_id, safe="")}&limit={max(1, min(int(limit or 20), 100))}',
+        )
+        raw_runs = data.get('runs', []) if isinstance(data, dict) else []
+        runs = [
+            await _normalize_cron_run(session, job_id, run)
+            for run in raw_runs
+            if isinstance(run, dict)
+        ]
+        if running:
+            now = time.time()
+            created_at = now - float(elapsed or 0)
+            runs.insert(
+                0,
+                {
+                    'id': f'{job_id}-running',
+                    'job_id': job_id,
+                    'status': 'running',
+                    'created_at': created_at,
+                    'started_at': created_at,
+                    'ended_at': None,
+                    'elapsed': elapsed,
+                    'error': None,
+                    'snippet': 'Hermes is currently running this automation. Output will appear here when the run completes.',
+                    'content': None,
+                    'usage': {},
+                },
+            )
+        return {
+            'job_id': job_id,
+            'runs': runs,
+            'total': (data.get('total') if isinstance(data, dict) else len(runs)) or len(runs),
+            'running': running,
+            'elapsed': elapsed,
+        }
+    finally:
+        await session.close()
+
+
+def _citadel_user_metadata(user: Any) -> tuple[dict[str, Any], dict[str, Any]]:
+    user_metadata = {
+        'id': getattr(user, 'id', None),
+        'name': getattr(user, 'name', None),
+        'email': getattr(user, 'email', None),
+        'role': getattr(user, 'role', None),
+    }
+    origin = {
+        'platform': 'citadel',
+        'user_id': user_metadata.get('id'),
+        'user_name': user_metadata.get('name'),
+        'user_email': user_metadata.get('email'),
+        'user_role': user_metadata.get('role'),
+    }
+    return user_metadata, origin
+
+
+async def create_hermes_cron_job(profile: str, body: dict[str, Any], user: Any) -> Any:
+    target_profile = (profile or 'default').strip() or 'default'
+    payload = dict(body or {})
+    payload['profile'] = target_profile
+    session = await _session()
+    try:
+        await _hermes_switch_profile(session, target_profile)
+        created = await _hermes_json_with_session(
+            session,
+            'POST',
+            '/api/crons/create',
+            json=payload,
+        )
+        job = created.get('job', created) if isinstance(created, dict) else {}
+        job_id = _cron_job_id(job)
+        if not job_id:
+            return created
+
+        user_metadata, origin = _citadel_user_metadata(user)
+        updated = await _hermes_json_with_session(
+            session,
+            'POST',
+            '/api/crons/update',
+            json={
+                'job_id': job_id,
+                'citadel_user': user_metadata,
+                'origin': origin,
+            },
+        )
+        return _normalize_cron_job(updated.get('job', updated), profile=target_profile)
+    except Exception:
+        try:
+            if 'job_id' in locals() and job_id:
+                await _hermes_json_with_session(session, 'POST', '/api/crons/delete', json={'job_id': job_id})
+        except Exception:
+            log.exception('Failed to clean up Hermes cron job after metadata attach failure')
+        raise
+    finally:
+        await session.close()
+
+
+async def update_hermes_cron_job(profile: str | None, job_id: str, updates: dict[str, Any]) -> Any:
+    session = await _session()
+    try:
+        await _hermes_switch_profile(session, profile or 'default')
+        payload = {'job_id': job_id, **(updates or {})}
+        if profile and 'profile' not in payload:
+            payload['profile'] = profile
+        data = await _hermes_json_with_session(session, 'POST', '/api/crons/update', json=payload)
+        return _normalize_cron_job(data.get('job', data), profile=profile or 'default')
+    finally:
+        await session.close()
+
+
+async def pause_hermes_cron_job(profile: str | None, job_id: str) -> Any:
+    session = await _session()
+    try:
+        await _hermes_switch_profile(session, profile or 'default')
+        data = await _hermes_json_with_session(session, 'POST', '/api/crons/pause', json={'job_id': job_id})
+        return _normalize_cron_job(data.get('job', data), profile=profile or 'default')
+    finally:
+        await session.close()
+
+
+async def resume_hermes_cron_job(profile: str | None, job_id: str) -> Any:
+    session = await _session()
+    try:
+        await _hermes_switch_profile(session, profile or 'default')
+        data = await _hermes_json_with_session(session, 'POST', '/api/crons/resume', json={'job_id': job_id})
+        return _normalize_cron_job(data.get('job', data), profile=profile or 'default')
+    finally:
+        await session.close()
+
+
+async def trigger_hermes_cron_job(profile: str | None, job_id: str) -> Any:
+    session = await _session()
+    try:
+        await _hermes_switch_profile(session, profile or 'default')
+        await _hermes_json_with_session(session, 'POST', '/api/crons/run', json={'job_id': job_id})
+        return await hermes_cron_job(job_id, profile)
+    finally:
+        await session.close()
+
+
+async def delete_hermes_cron_job(profile: str | None, job_id: str) -> Any:
+    session = await _session()
+    try:
+        await _hermes_switch_profile(session, profile or 'default')
+        return await _hermes_json_with_session(session, 'POST', '/api/crons/delete', json={'job_id': job_id})
+    finally:
+        await session.close()
 
 
 def _profile_name(profile: Any) -> str | None:

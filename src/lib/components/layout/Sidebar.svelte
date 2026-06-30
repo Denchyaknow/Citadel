@@ -75,6 +75,7 @@
 	import Sidebar from '../icons/Sidebar.svelte';
 	import PinnedModelList from './Sidebar/PinnedModelList.svelte';
 	import Note from '../icons/Note.svelte';
+	import ChartBar from '../icons/ChartBar.svelte';
 	import Code from '../icons/Code.svelte';
 	import { slide } from 'svelte/transition';
 	import HotkeyHint from '../common/HotkeyHint.svelte';
@@ -110,9 +111,15 @@
 	let newFolderId = null;
 
 	$: pinnedItems = $settings?.pinnedMenuItems ?? DEFAULT_PINNED_ITEMS;
+	$: fixedPrimaryItems = ['status', 'notes', 'automations'].filter((itemId) =>
+		isMenuItemVisible(itemId)
+	);
+	$: optionalPinnedItems = pinnedItems.filter((itemId) => !fixedPrimaryItems.includes(itemId));
 
 	const isMenuItemVisible = (id) => {
 		switch (id) {
+			case 'status':
+				return true;
 			case 'notes':
 				return (
 					($config?.features?.enable_notes ?? false) &&
@@ -147,6 +154,7 @@
 
 	const getMenuItemMeta = (id) => {
 		const items = {
+			status: { label: 'Status', href: '/', iconType: 'status' },
 			notes: { label: 'Notes', href: '/notes', iconType: 'note' },
 			workspace: { label: 'Workspace', href: '/workspace', iconType: 'workspace' },
 			automations: { label: 'Automations', href: '/automations', iconType: 'automations' },
@@ -164,7 +172,7 @@
 				onUpdate: async (event) => {
 					const itemId = event.item.dataset.id;
 					const newIndex = event.newIndex;
-					const current = [...pinnedItems];
+					const current = [...optionalPinnedItems];
 					const oldIndex = current.indexOf(itemId);
 					current.splice(oldIndex, 1);
 					current.splice(newIndex, 0, itemId);
@@ -690,7 +698,7 @@
 	}}
 	onDelete={(id) => {
 		if ($chatId === id) {
-			goto('/');
+			goto('/chat');
 			chatId.set('');
 		}
 	}}
@@ -772,7 +780,7 @@
 	id="sidebar-new-chat-button"
 	class="hidden"
 	on:click={() => {
-		goto('/');
+		goto('/chat');
 		newChatHandler();
 	}}
 />
@@ -827,13 +835,13 @@
 					<Tooltip content={$i18n.t('New Chat')} placement="right">
 						<a
 							class=" cursor-pointer flex rounded-xl hover:bg-gray-100 dark:hover:bg-gray-850 transition group"
-							href="/"
+							href="/chat"
 							draggable="false"
 							on:click={async (e) => {
 								e.stopImmediatePropagation();
 								e.preventDefault();
 
-								goto('/');
+								goto('/chat');
 								newChatHandler();
 							}}
 							aria-label={$i18n.t('New Chat')}
@@ -867,7 +875,52 @@
 					</div>
 				{/if}
 
-				{#each pinnedItems as itemId (itemId)}
+				{#each fixedPrimaryItems as itemId (itemId)}
+					{@const meta = getMenuItemMeta(itemId)}
+					{#if meta}
+						<div class="">
+							<Tooltip content={$i18n.t(meta.label)} placement="right">
+								<a
+									class=" cursor-pointer flex rounded-xl hover:bg-gray-100 dark:hover:bg-gray-850 transition group"
+									href={meta.href}
+									on:click={async (e) => {
+										e.stopImmediatePropagation();
+										e.preventDefault();
+										goto(meta.href);
+										itemClickHandler();
+									}}
+									draggable="false"
+									aria-label={$i18n.t(meta.label)}
+								>
+									<div class=" self-center flex items-center justify-center size-9">
+										{#if itemId === 'status'}
+											<ChartBar className="size-4.5" />
+										{:else if itemId === 'notes'}
+											<Note className="size-4.5" />
+										{:else if itemId === 'automations'}
+											<svg
+												xmlns="http://www.w3.org/2000/svg"
+												fill="none"
+												viewBox="0 0 24 24"
+												stroke-width="1.5"
+												stroke="currentColor"
+												class="size-4.5"
+											>
+												<path
+													stroke-linecap="round"
+													stroke-linejoin="round"
+													d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"
+												/>
+											</svg>
+										{/if}
+									</div>
+								</a>
+							</Tooltip>
+						</div>
+					{/if}
+				{/each}
+
+				{#each optionalPinnedItems as itemId (itemId)}
 					{@const meta = getMenuItemMeta(itemId)}
 					{#if meta && isMenuItemVisible(itemId)}
 						<div class="">
@@ -1069,7 +1122,7 @@
 						<a
 							id="sidebar-new-chat-button"
 							class="group grow flex items-center space-x-3 rounded-2xl px-2.5 py-2 hover:bg-gray-100 dark:hover:bg-gray-900 transition outline-none"
-							href="/"
+							href="/chat"
 							draggable="false"
 							on:click={newChatHandler}
 							aria-label={$i18n.t('New Chat')}
@@ -1109,8 +1162,52 @@
 						</div>
 					{/if}
 
+					<div>
+						{#each fixedPrimaryItems as itemId (itemId)}
+							{@const meta = getMenuItemMeta(itemId)}
+							{#if meta}
+								<div class="px-[0.4375rem] flex justify-center text-gray-800 dark:text-gray-200">
+									<a
+										id="sidebar-{itemId}-button"
+										class="grow flex items-center space-x-3 rounded-2xl px-2.5 py-2 hover:bg-gray-100 dark:hover:bg-gray-900 transition"
+										href={meta.href}
+										on:click={itemClickHandler}
+										draggable="false"
+										aria-label={$i18n.t(meta.label)}
+									>
+										<div class="self-center">
+											{#if itemId === 'status'}
+												<ChartBar className="size-4.5" />
+											{:else if itemId === 'notes'}
+												<Note className="size-4.5" strokeWidth="2" />
+											{:else if itemId === 'automations'}
+												<svg
+													xmlns="http://www.w3.org/2000/svg"
+													fill="none"
+													viewBox="0 0 24 24"
+													stroke-width="2"
+													stroke="currentColor"
+													class="size-4.5"
+												>
+													<path
+														stroke-linecap="round"
+														stroke-linejoin="round"
+														d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z"
+													/>
+												</svg>
+											{/if}
+										</div>
+										<div class="flex flex-1 self-center translate-y-[0.5px]">
+											<div class=" self-center text-sm font-primary">{$i18n.t(meta.label)}</div>
+										</div>
+									</a>
+								</div>
+							{/if}
+						{/each}
+					</div>
+
 					<div id="pinned-menu-items-list">
-						{#each pinnedItems as itemId (itemId)}
+						{#each optionalPinnedItems as itemId (itemId)}
 							{@const meta = getMenuItemMeta(itemId)}
 							{#if meta && isMenuItemVisible(itemId)}
 								<div

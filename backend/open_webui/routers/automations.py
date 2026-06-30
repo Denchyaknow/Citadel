@@ -23,6 +23,18 @@ from open_webui.utils.automations import (
     rrule_interval_seconds,
     validate_rrule,
 )
+from open_webui.utils.hermes import (
+    create_hermes_cron_job,
+    delete_hermes_cron_job,
+    hermes_cron_job,
+    hermes_cron_job_runs,
+    hermes_cron_jobs,
+    pause_hermes_cron_job,
+    resume_hermes_cron_job,
+    trigger_hermes_cron_job,
+    update_hermes_cron_job,
+)
+from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 log = logging.getLogger(__name__)
@@ -30,6 +42,26 @@ log = logging.getLogger(__name__)
 router = APIRouter()
 
 PAGE_ITEM_COUNT = 30
+
+
+class HermesCronJobCreate(BaseModel):
+    prompt: str = ''
+    schedule: str
+    name: str = ''
+    deliver: str = 'local'
+    skills: list[str] | None = None
+    model: str | None = None
+    provider: str | None = None
+    base_url: str | None = None
+    script: str | None = None
+    context_from: object | None = None
+    enabled_toolsets: list[str] | None = None
+    workdir: str | None = None
+    no_agent: bool = False
+
+
+class HermesCronJobUpdate(BaseModel):
+    updates: dict[str, object]
 
 
 ############################
@@ -107,6 +139,106 @@ async def enrich_automation(automation: AutomationModel, db: AsyncSession, tz: s
 ############################
 # GetAutomationItems (paginated)
 ############################
+
+
+@router.get('/hermes/cron/jobs')
+async def list_hermes_automation_cron_jobs(
+    request: Request,
+    profile: str = 'all',
+    user=Depends(get_verified_user),
+):
+    await check_automations_permission(request, user)
+    return await hermes_cron_jobs(profile)
+
+
+@router.get('/hermes/cron/jobs/{job_id}')
+async def get_hermes_automation_cron_job(
+    request: Request,
+    job_id: str,
+    profile: str | None = None,
+    user=Depends(get_verified_user),
+):
+    await check_automations_permission(request, user)
+    return await hermes_cron_job(job_id, profile)
+
+
+@router.get('/hermes/cron/jobs/{job_id}/runs')
+async def get_hermes_automation_cron_job_runs(
+    request: Request,
+    job_id: str,
+    profile: str | None = None,
+    limit: int = 20,
+    user=Depends(get_verified_user),
+):
+    await check_automations_permission(request, user)
+    return await hermes_cron_job_runs(job_id, profile, limit)
+
+
+@router.post('/hermes/cron/jobs')
+async def create_hermes_automation_cron_job(
+    request: Request,
+    form_data: HermesCronJobCreate,
+    profile: str = 'default',
+    user=Depends(get_verified_user),
+):
+    await check_automations_permission(request, user)
+    return await create_hermes_cron_job(profile, form_data.model_dump(exclude_none=True), user)
+
+
+@router.put('/hermes/cron/jobs/{job_id}')
+async def update_hermes_automation_cron_job(
+    request: Request,
+    job_id: str,
+    form_data: HermesCronJobUpdate,
+    profile: str | None = None,
+    user=Depends(get_verified_user),
+):
+    await check_automations_permission(request, user)
+    return await update_hermes_cron_job(profile, job_id, form_data.updates)
+
+
+@router.post('/hermes/cron/jobs/{job_id}/pause')
+async def pause_hermes_automation_cron_job(
+    request: Request,
+    job_id: str,
+    profile: str | None = None,
+    user=Depends(get_verified_user),
+):
+    await check_automations_permission(request, user)
+    return await pause_hermes_cron_job(profile, job_id)
+
+
+@router.post('/hermes/cron/jobs/{job_id}/resume')
+async def resume_hermes_automation_cron_job(
+    request: Request,
+    job_id: str,
+    profile: str | None = None,
+    user=Depends(get_verified_user),
+):
+    await check_automations_permission(request, user)
+    return await resume_hermes_cron_job(profile, job_id)
+
+
+@router.post('/hermes/cron/jobs/{job_id}/trigger')
+async def trigger_hermes_automation_cron_job(
+    request: Request,
+    job_id: str,
+    profile: str | None = None,
+    user=Depends(get_verified_user),
+):
+    await check_automations_permission(request, user)
+    return await trigger_hermes_cron_job(profile, job_id)
+
+
+@router.delete('/hermes/cron/jobs/{job_id}')
+async def delete_hermes_automation_cron_job(
+    request: Request,
+    job_id: str,
+    profile: str | None = None,
+    user=Depends(get_verified_user),
+):
+    await check_automations_permission(request, user)
+    return await delete_hermes_cron_job(profile, job_id)
 
 
 @router.get('/list')

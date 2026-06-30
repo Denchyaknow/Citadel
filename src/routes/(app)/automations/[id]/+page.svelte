@@ -5,14 +5,14 @@
 
 	import { page } from '$app/stores';
 	import { user, showSidebar, config } from '$lib/stores';
-	import { getAutomationById } from '$lib/apis/automations';
+	import { getAutomationById, type AutomationResponse } from '$lib/apis/automations';
 
 	import AutomationEditor from '$lib/components/automations/AutomationEditor.svelte';
 	import Spinner from '$lib/components/common/Spinner.svelte';
 
 	const i18n = getContext('i18n');
 
-	let automation = null;
+	let automation: AutomationResponse | null = null;
 	let loaded = false;
 
 	$: automationId = $page.params.id;

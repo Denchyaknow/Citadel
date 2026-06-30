@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { onMount, getContext } from 'svelte';
+	import { onMount, onDestroy, getContext } from 'svelte';
 	import { toast } from 'svelte-sonner';
 	import { goto } from '$app/navigation';
 
@@ -15,6 +15,7 @@
 		runAutomationById,
 		deleteAutomationById,
 		getAutomationRuns,
+		getAutomationById,
 		type AutomationForm,
 		type AutomationResponse,
 		type AutomationRunModel
@@ -27,7 +28,6 @@
 	import ChevronLeft from '$lib/components/icons/ChevronLeft.svelte';
 
 	import ScheduleDropdown from '$lib/components/automations/ScheduleDropdown.svelte';
-	import ModelDropdown from '$lib/components/automations/ModelDropdown.svelte';
 
 	dayjs.extend(relativeTime);
 	dayjs.extend(localizedFormat);
@@ -38,7 +38,7 @@
 
 	let name = '';
 	let prompt = '';
-	let model_id = '';
+	let profile = '';
 	let is_active = true;
 
 	let loading = false;
@@ -50,12 +50,25 @@
 	let hasMoreRuns = true;
 	let runsPage = 0;
 	let isDirty = false;
+	let refreshTimer: ReturnType<typeof setInterval> | null = null;
 
 	let scheduleDropdown: ScheduleDropdown;
 
-	const formatRunTime = (ts: number): string => {
+	const coerceDate = (value: string | number | null | undefined): Date | null => {
+		if (!value) return null;
+		const numeric = typeof value === 'number' ? value : Number(value);
+		const date =
+			typeof value === 'number' || !Number.isNaN(numeric)
+				? new Date(numeric > 10_000_000_000 ? numeric / 1_000_000 : numeric * 1000)
+				: new Date(value);
+		return Number.isNaN(date.getTime()) ? null : date;
+	};
+
+	const formatRunTime = (value: string | number): string => {
+		const date = coerceDate(value);
+		if (!date) return `${value}`;
 		const now = Date.now();
-		const diff = now - ts / 1_000_000;
+		const diff = now - date.getTime();
 
 		const seconds = Math.floor(diff / 1000);
 		const minutes = Math.floor(seconds / 60);
@@ -72,16 +85,29 @@
 		return $i18n.t('1m', { context: 'time_ago' });
 	};
 
-	const formatNextRun = (ts: number | null): string => {
-		if (!ts) return $i18n.t('Not scheduled');
-		const d = dayjs(ts / 1_000_000);
+	const formatNextRun = (value: string | number | null): string => {
+		const date = coerceDate(value);
+		if (!date) return $i18n.t('Not scheduled');
+		const d = dayjs(date);
 		if (d.isSame(dayjs(), 'day')) return `${$i18n.t('Today at')} ${d.format('LT')}`;
 		return d.format('L LT');
 	};
 
+	const runLabel = (run: AutomationRunModel): string => {
+		if (run.status === 'running') return $i18n.t('Running');
+		if (run.status === 'error') return $i18n.t('Failed');
+		return $i18n.t('Completed');
+	};
+
+	const runPreview = (run: AutomationRunModel): string | null => {
+		const value = (run.error || run.snippet || run.content || '').trim();
+		if (!value) return null;
+		return value.length > 220 ? `${value.slice(0, 220)}...` : value;
+	};
+
 	const saveHandler = async () => {
-		if (!name.trim() || !prompt.trim() || !model_id.trim()) {
-			toast.error($i18n.t('Name, prompt, and model are required'));
+		if (!name.trim() || !prompt.trim() || !profile.trim()) {
+			toast.error($i18n.t('Name, prompt, and profile are required'));
 			return;
 		}
 		saving = true;
@@ -90,8 +116,8 @@
 				name: name.trim(),
 				data: {
 					prompt: prompt.trim(),
-					model_id: model_id.trim(),
-					rrule: scheduleDropdown.buildRrule()
+					profile,
+					schedule: scheduleDropdown.buildScheduleString()
 				},
 				is_active
 			};
@@ -102,17 +128,19 @@
 				toast.success($i18n.t('Automation updated'));
 			}
 		} catch (e: any) {
-			toast.error(e?.detail ?? `${e}` ?? 'Failed to save');
+			toast.error(e?.detail ?? `${e || 'Failed to save'}`);
 		} finally {
 			saving = false;
 		}
 	};
 
 	const toggleHandler = async () => {
-		const res = await toggleAutomationById(localStorage.token, automation.id).catch((err) => {
-			toast.error(`${err}`);
-			return null;
-		});
+		const res = await toggleAutomationById(localStorage.token, automation.id, !is_active).catch(
+			(err: unknown) => {
+				toast.error(`${err}`);
+				return null;
+			}
+		);
 		if (res) {
 			is_active = res.is_active;
 			automation = res;
@@ -126,8 +154,10 @@
 			return null;
 		});
 		if (res) {
+			automation = res;
 			toast.success($i18n.t('Automation triggered'));
-			setTimeout(() => loadRuns(false), 2000);
+			await loadRuns(false);
+			startRunningRefresh();
 		}
 		loading = false;
 	};
@@ -172,6 +202,34 @@
 		runsLoading = false;
 	};
 
+	const refreshAutomation = async () => {
+		const [latest] = await Promise.all([
+			getAutomationById(localStorage.token, automation.id).catch(() => null),
+			loadRuns(false)
+		]);
+		if (latest) {
+			automation = latest;
+			is_active = latest.is_active;
+		}
+		if (!latest?.running && !runs.some((run) => run.status === 'running')) {
+			stopRunningRefresh();
+		}
+	};
+
+	const startRunningRefresh = () => {
+		if (refreshTimer) return;
+		refreshTimer = setInterval(() => {
+			refreshAutomation();
+		}, 5000);
+	};
+
+	const stopRunningRefresh = () => {
+		if (refreshTimer) {
+			clearInterval(refreshTimer);
+			refreshTimer = null;
+		}
+	};
+
 	const markDirty = () => {
 		isDirty = true;
 	};
@@ -188,14 +246,21 @@
 	onMount(async () => {
 		name = automation.name;
 		prompt = automation.data.prompt;
-		model_id = automation.data.model_id;
+		profile = automation.profile;
 		is_active = automation.is_active;
 
 		if (scheduleDropdown) {
-			scheduleDropdown.parseRrule(automation.data.rrule);
+			scheduleDropdown.parseSchedule(automation.data.schedule);
 		}
 
 		await loadRuns();
+		if (automation.running || runs.some((run) => run.status === 'running')) {
+			startRunningRefresh();
+		}
+	});
+
+	onDestroy(() => {
+		stopRunningRefresh();
 	});
 </script>
 
@@ -328,10 +393,10 @@
 							/>
 						</div>
 
-						<!-- Model -->
+						<!-- Profile -->
 						<div class="flex items-center justify-between text-xs">
-							<span class="text-gray-600 dark:text-gray-400">{$i18n.t('Model')}</span>
-							<ModelDropdown bind:model_id side="bottom" align="end" onChange={markDirty} />
+							<span class="text-gray-600 dark:text-gray-400">{$i18n.t('Profile')}</span>
+							<span class="text-gray-700 dark:text-gray-300 truncate max-w-36">{profile}</span>
 						</div>
 					</div>
 				</div>
@@ -354,6 +419,12 @@
 								></span>
 								{is_active ? $i18n.t('Active') : $i18n.t('Paused')}
 							</span>
+						</div>
+						<div class="flex items-center justify-between text-xs">
+							<span class="text-gray-600 dark:text-gray-400">{$i18n.t('Last status')}</span>
+							<span class=" text-gray-700 dark:text-gray-300"
+								>{automation.last_status ?? $i18n.t('Not run')}</span
+							>
 						</div>
 
 						<div class="flex items-center justify-between text-xs">
@@ -391,7 +462,7 @@
 							<div class="space-y-0.5 w-full">
 								{#each runs as run (run.id)}
 									<button
-										class="w-full text-left flex items-center gap-2.5 px-2.5 py-1.5 rounded-xl hover:bg-gray-100/80 dark:hover:bg-gray-850/80 transition-colors {run.chat_id
+										class="w-full text-left flex items-start gap-2.5 px-2.5 py-2 rounded-xl hover:bg-gray-100/80 dark:hover:bg-gray-850/80 transition-colors {run.chat_id
 											? 'cursor-pointer'
 											: 'cursor-default'}"
 										on:click={() => {
@@ -437,9 +508,19 @@
 											{/if}
 										</div>
 										<div class="flex-1 min-w-0">
-											<div class="text-xs text-gray-800 dark:text-gray-200 truncate">
-												{automation.name}
+											<div class="flex items-center gap-1.5 min-w-0">
+												<div class="text-xs text-gray-800 dark:text-gray-200 truncate">
+													{runLabel(run)}
+												</div>
+												{#if run.filename}
+													<div class="text-[10px] text-gray-400 truncate">{run.filename}</div>
+												{/if}
 											</div>
+											{#if runPreview(run)}
+												<div class="mt-0.5 text-[11px] text-gray-500 dark:text-gray-400 line-clamp-3 whitespace-pre-line">
+													{runPreview(run)}
+												</div>
+											{/if}
 										</div>
 										<span class="shrink-0 text-[10px] text-gray-500 font-mono"
 											>{formatRunTime(run.created_at)}</span
