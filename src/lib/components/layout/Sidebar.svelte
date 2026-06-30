@@ -154,7 +154,7 @@
 
 	const getMenuItemMeta = (id) => {
 		const items = {
-			status: { label: 'Status', href: '/', iconType: 'status' },
+			status: { label: 'Status', href: '/status', iconType: 'status' },
 			notes: { label: 'Notes', href: '/notes', iconType: 'note' },
 			workspace: { label: 'Workspace', href: '/workspace', iconType: 'workspace' },
 			automations: { label: 'Automations', href: '/automations', iconType: 'automations' },
