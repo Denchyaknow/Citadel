@@ -44,6 +44,13 @@ from open_webui.utils.hermes import (
     hermes_profile_from_model,
     is_hermes_model_id,
 )
+from open_webui.utils.localbrain import (
+    LOCALBRAIN_MODEL_ID,
+    force_localbrain_form_data,
+    generate_localbrain_chat_completion,
+    localbrain_model_catalog,
+    localbrain_only_enabled,
+)
 from starlette.responses import JSONResponse, Response, StreamingResponse
 
 logging.basicConfig(stream=sys.stdout, level=GLOBAL_LOG_LEVEL)
@@ -192,6 +199,10 @@ async def generate_chat_completion(
     else:
         models = request.app.state.MODELS
 
+    if localbrain_only_enabled():
+        force_localbrain_form_data(form_data)
+        models = {LOCALBRAIN_MODEL_ID: localbrain_model_catalog()[0]}
+
     model_id = form_data['model']
     lookup_model_id = (
         f'hermes:{hermes_profile_from_model(model_id)}'
@@ -207,7 +218,7 @@ async def generate_chat_completion(
         return await generate_direct_chat_completion(request, form_data, user=user, models=models)
     else:
         # Check if user has access to the model
-        if not bypass_filter and user.role == 'user':
+        if model.get('owned_by') != 'localbrain' and not bypass_filter and user.role == 'user':
             try:
                 await check_model_access(user, model)
             except Exception as e:
@@ -284,6 +295,8 @@ async def generate_chat_completion(
         if model.get('pipe'):
             # Below does not require bypass_filter because this is the only route the uses this function and it is already bypassing the filter
             return await generate_function_chat_completion(request, form_data, user=user, models=models)
+        if model.get('owned_by') == 'localbrain':
+            return await generate_localbrain_chat_completion(request, form_data, user=user)
         if model.get('owned_by') == 'hermes' or is_hermes_model_id(model_id):
             return await generate_hermes_chat_completion(request, form_data, user=user)
         if model.get('owned_by') == 'ollama':

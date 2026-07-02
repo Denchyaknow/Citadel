@@ -13,7 +13,8 @@
 		showControls,
 		showSidebar,
 		temporaryChatEnabled,
-		user
+		user,
+		models
 	} from '$lib/stores';
 
 	import { slide } from 'svelte/transition';
@@ -69,6 +70,11 @@
 
 	let showShareChatModal = false;
 	let showDownloadChatModal = false;
+
+	$: localBrainOnly =
+		$models.length === 1 &&
+		$models[0]?.id === 'localbrain-router:latest' &&
+		$models[0]?.owned_by === 'localbrain';
 </script>
 
 <ShareChatModal bind:show={showShareChatModal} chatId={$chatId} />
@@ -121,7 +127,7 @@
 			{$showSidebar ? 'ml-1' : ''}
 			"
 				>
-					{#if showModelSelector}
+					{#if showModelSelector && !localBrainOnly}
 						<ModelSelector bind:selectedModels showSetDefault={!shareEnabled} />
 					{/if}
 				</div>

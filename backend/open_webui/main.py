@@ -502,6 +502,7 @@ from open_webui.routers import (
     openai,
     pipelines,
     prompts,
+    ragstackproxy,
     retrieval,
     scim,
     skills,
@@ -563,6 +564,12 @@ from open_webui.utils.chat import (
 )
 from open_webui.utils.embeddings import generate_embeddings
 from open_webui.utils.logger import start_logger
+from open_webui.utils.localbrain import (
+    LOCALBRAIN_MODEL_ID,
+    force_localbrain_form_data,
+    localbrain_model_catalog,
+    localbrain_only_enabled,
+)
 from open_webui.utils.middleware import (
     build_chat_response_context,
     process_chat_payload,
@@ -1430,6 +1437,7 @@ app.include_router(prompts.router, prefix='/api/v1/prompts', tags=['prompts'])
 app.include_router(tools.router, prefix='/api/v1/tools', tags=['tools'])
 app.include_router(skills.router, prefix='/api/v1/skills', tags=['skills'])
 app.include_router(hermes.router, prefix='/api/v1/hermes', tags=['hermes'])
+app.include_router(ragstackproxy.router, prefix='/api/v1/ragstackproxy', tags=['ragstackproxy'])
 
 app.include_router(memories.router, prefix='/api/v1/memories', tags=['memories'])
 app.include_router(folders.router, prefix='/api/v1/folders', tags=['folders'])
@@ -1475,6 +1483,12 @@ if audit_level != AuditLevel.NONE:
 @app.get('/api/models')
 @app.get('/api/v1/models')  # Experimental: Compatibility with OpenAI API
 async def get_models(request: Request, refresh: bool = False, user=Depends(get_verified_user)):
+    if localbrain_only_enabled():
+        models = localbrain_model_catalog()
+        request.app.state.MODELS = {model['id']: model for model in models}
+        request.app.state.BASE_MODELS = models
+        return {'data': models}
+
     all_models = await get_all_models(request, refresh=refresh, user=user)
 
     models = []
@@ -1664,7 +1678,11 @@ async def chat_completion(
     form_data: dict,
     user=Depends(get_verified_user),
 ):
-    if not request.app.state.MODELS:
+    if localbrain_only_enabled():
+        force_localbrain_form_data(form_data)
+        request.app.state.MODELS = {LOCALBRAIN_MODEL_ID: localbrain_model_catalog()[0]}
+        request.app.state.BASE_MODELS = localbrain_model_catalog()
+    elif not request.app.state.MODELS:
         await get_all_models(request, user=user)
 
     model_id = form_data.get('model', None)
@@ -1682,7 +1700,11 @@ async def chat_completion(
             model_info = await Models.get_model_by_id(model_id)
 
             # Check if user has access to the model
-            if not BYPASS_MODEL_ACCESS_CONTROL and (user.role != 'admin' or not BYPASS_ADMIN_ACCESS_CONTROL):
+            if (
+                model.get('owned_by') != 'localbrain'
+                and not BYPASS_MODEL_ACCESS_CONTROL
+                and (user.role != 'admin' or not BYPASS_ADMIN_ACCESS_CONTROL)
+            ):
                 try:
                     await check_model_access(user, model)
                 except Exception as e:
@@ -1746,6 +1768,8 @@ async def chat_completion(
         if not message_ids:
             message_ids = {model_id: form_data.pop('id', None)}
         else:
+            if localbrain_only_enabled():
+                message_ids = {LOCALBRAIN_MODEL_ID: next(iter(message_ids.values()), None)}
             form_data.pop('id', None)
 
         user_message = form_data.pop('user_message', None) or form_data.pop('parent_message', None)

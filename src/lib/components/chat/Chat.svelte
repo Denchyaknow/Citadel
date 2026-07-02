@@ -146,6 +146,16 @@
 
 	let selectedModels = [''];
 	let atSelectedModel: Model | undefined;
+	const LOCALBRAIN_MODEL_ID = 'localbrain-router:latest';
+	$: localBrainOnly =
+		$models.length === 1 &&
+		$models[0]?.id === LOCALBRAIN_MODEL_ID &&
+		$models[0]?.owned_by === 'localbrain';
+	$: if (localBrainOnly && !equal(selectedModels, [LOCALBRAIN_MODEL_ID])) {
+		atSelectedModel = undefined;
+		selectedModels = [LOCALBRAIN_MODEL_ID];
+		sessionStorage.removeItem('selectedModels');
+	}
 	let selectedModelIds = [];
 	$: if (atSelectedModel !== undefined) {
 		selectedModelIds = [atSelectedModel.id];
@@ -2115,6 +2125,9 @@
 			: atSelectedModel !== undefined
 				? [atSelectedModel.id]
 				: selectedModels;
+		if (localBrainOnly) {
+			selectedModelIds = [LOCALBRAIN_MODEL_ID];
+		}
 
 		// Create response messages for each selected model
 		// Build message_ids map: {model_id: assistant_message_id}
@@ -2292,6 +2305,7 @@
 	) => {
 		const responseMessage = _history.messages[responseMessageId];
 		const userMessage = _history.messages[responseMessage.parentId];
+		const modelId = model?.id;
 
 		const chatMessageFiles = _messages
 			.filter((message) => message.files)

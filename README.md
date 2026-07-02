@@ -191,6 +191,10 @@ Notes:
 - `CITADEL_HERMES_TIMEOUT` controls longer chat/agent calls.
 - `CITADEL_HERMES_SYNC_TIMEOUT` controls shorter sync/status calls.
 - `HERMES_HOME` is optional, but helps the Status page find local Hermes usage files.
+- Local chat-capable Ollama models on this stack include `ragstack-llm:latest` and `qwen3:8b`. Embedding models such as `ragstack-embed:latest` and `nomic-embed-text:latest` are vector/embedding-only and cannot be used for chat sessions.
+- Hermes Hivemind profiles should use `model.provider=custom`, `model.default=ragstack-llm`, and `model.base_url=http://127.0.0.1:11434/v1`. Keep the Hermes profile default tagless even though Citadel and Ollama may list the served model as `ragstack-llm:latest`; Ollama resolves `ragstack-llm` to the `latest` alias.
+- If a Hermes profile chat returns an agent error and Hermes logs mention `Unknown provider 'custom:ragstack-llm'` or a Codex `HTTP 404`, the profile likely has `model.default=ragstack-llm:latest`. Rerun the fixed Phase 13 profile provisioning or set that Hermes profile default to `ragstack-llm`.
+- Citadel hides embedding-only Ollama models from the chat model list and discards stale Citadel-to-Hermes session mappings that still point at the old `ragstack-llm:latest` custom-provider session form. The old Hermes session is not deleted; Citadel creates a fresh fixed session for the chat.
 
 Useful inherited Open WebUI variables still apply where relevant:
 

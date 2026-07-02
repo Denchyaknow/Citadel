@@ -12,6 +12,7 @@ from open_webui.config import (
 from open_webui.env import BYPASS_MODEL_ACCESS_CONTROL, GLOBAL_LOG_LEVEL
 from open_webui.functions import get_function_models
 from open_webui.utils.hermes import fetch_hermes_models
+from open_webui.utils.localbrain import localbrain_model_catalog, localbrain_only_enabled
 from open_webui.models.access_grants import AccessGrants
 from open_webui.models.functions import Functions
 from open_webui.models.groups import Groups
@@ -38,12 +39,23 @@ async def fetch_ollama_models(request: Request, user: UserModel = None):
             'object': 'model',
             'created': 0,
             'owned_by': 'ollama',
+            'info': {
+                'meta': {
+                    'capabilities': {
+                        'chat': 'completion' in (model.get('capabilities') or []),
+                        'embedding': 'embedding' in (model.get('capabilities') or []),
+                        'tools': 'tools' in (model.get('capabilities') or []),
+                        'thinking': 'thinking' in (model.get('capabilities') or []),
+                    }
+                }
+            },
             'ollama': model,
             'loaded': 'expires_at' in model,
             'connection_type': model.get('connection_type', 'local'),
             'tags': model.get('tags', []),
         }
         for model in raw_ollama_models['models']
+        if 'completion' in (model.get('capabilities') or [])
     ]
 
 
@@ -53,6 +65,9 @@ async def fetch_openai_models(request: Request, user: UserModel = None):
 
 
 async def get_all_base_models(request: Request, user: UserModel = None):
+    if localbrain_only_enabled():
+        return localbrain_model_catalog()
+
     openai_task = (
         fetch_openai_models(request, user)
         if request.app.state.config.ENABLE_OPENAI_API
@@ -78,6 +93,16 @@ async def get_all_base_models(request: Request, user: UserModel = None):
 
 
 async def get_all_models(request, refresh: bool = False, user: UserModel = None):
+    if localbrain_only_enabled():
+        models = localbrain_model_catalog()
+        models_dict = {model['id']: model for model in models}
+        if isinstance(request.app.state.MODELS, RedisDict):
+            request.app.state.MODELS.set(models_dict)
+        else:
+            request.app.state.MODELS = models_dict
+        request.app.state.BASE_MODELS = models
+        return [model.copy() for model in models]
+
     if (
         request.app.state.MODELS
         and request.app.state.BASE_MODELS

@@ -918,7 +918,11 @@ async def _get_or_create_hermes_session(
         session_map = await _read_session_map()
         existing = session_map.get(key)
         if existing:
-            return existing
+            if await _is_legacy_tagged_local_session(client, existing):
+                session_map.pop(key, None)
+                await _write_session_map(session_map)
+            else:
+                return existing
 
         body = {'profile': profile}
         if model and not is_hermes_model_id(model):
@@ -943,12 +947,35 @@ async def _get_or_create_hermes_session(
         return str(session_id)
 
 
-def _openai_chunk(completion_id: str, model: str, content: str = '', *, role: bool = False, finish_reason=None) -> str:
+async def _is_legacy_tagged_local_session(client: aiohttp.ClientSession, session_id: str) -> bool:
+    try:
+        data = await _hermes_json_with_session(client, 'GET', f'/api/session?session_id={quote(session_id)}')
+        session = _session_detail_from_payload(data) or {}
+        return (
+            str(session.get('model_provider') or '').strip() == 'custom'
+            and str(session.get('model') or '').strip() == 'ragstack-llm:latest'
+        )
+    except Exception:
+        log.debug('Unable to inspect mapped agent session %s before reuse', session_id, exc_info=True)
+        return True
+
+
+def _openai_chunk(
+    completion_id: str,
+    model: str,
+    content: str = '',
+    *,
+    reasoning_content: str = '',
+    role: bool = False,
+    finish_reason=None,
+) -> str:
     delta = {}
     if role:
         delta['role'] = 'assistant'
     if content:
         delta['content'] = content
+    if reasoning_content:
+        delta['reasoning_content'] = reasoning_content
     payload = {
         'id': completion_id,
         'object': 'chat.completion.chunk',
@@ -1021,9 +1048,13 @@ async def _hermes_event_stream(
                         error_text = str(payload.get('message') or payload.get('error') or payload)
                         yield _openai_chunk(completion_id, model_id, f'\n\n**Agent error:** {error_text}')
                         break
-                    text = _sse_payload_text(event, payload if isinstance(payload, dict) else {'text': payload})
+                    payload_dict = payload if isinstance(payload, dict) else {'text': payload}
+                    text = _sse_payload_text(event, payload_dict)
                     if text:
-                        yield _openai_chunk(completion_id, model_id, text)
+                        if event == 'reasoning':
+                            yield _openai_chunk(completion_id, model_id, reasoning_content=text)
+                        else:
+                            yield _openai_chunk(completion_id, model_id, text)
                 event = 'message'
                 continue
             if line.startswith(':'):

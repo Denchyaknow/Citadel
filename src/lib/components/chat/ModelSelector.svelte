@@ -41,6 +41,13 @@
 	$: hermesProfileModels = ($models as unknown as HermesModel[]).filter(
 		(model) => model?.owned_by === 'hermes'
 	);
+	$: localBrainOnly =
+		$models.length === 1 &&
+		$models[0]?.id === 'localbrain-router:latest' &&
+		$models[0]?.owned_by === 'localbrain';
+	$: if (localBrainOnly && !equal(selectedModels, ['localbrain-router:latest'])) {
+		selectedModels = ['localbrain-router:latest'];
+	}
 	$: hermesMode = hermesProfileModels.length > 0;
 	$: selectedHermesProfile = getHermesProfileFromModelId(selectedModels?.[0]);
 	$: selectedHermesProfileModel = hermesProfileModels.find(
@@ -109,6 +116,7 @@
 	}
 </script>
 
+{#if !localBrainOnly}
 <div class="flex flex-col w-full items-start">
 	{#if hermesMode}
 		<div class="flex w-full max-w-fit items-center gap-1">
@@ -238,8 +246,9 @@
 	{/each}
 	{/if}
 </div>
+{/if}
 
-{#if showSetDefault}
+{#if showSetDefault && !localBrainOnly}
 	<div
 		class="relative text-left mt-[1px] ml-1 text-[0.7rem] text-gray-600 dark:text-gray-400 font-primary"
 	>
