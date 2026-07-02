@@ -208,6 +208,24 @@ def compact_text(value: Any, limit: int = 900) -> str:
     return text if len(text) <= limit else f'{text[:limit - 3]}...'
 
 
+def handoff_exchange_text(handoff: dict[str, Any], route: dict[str, Any], chat: dict[str, Any]) -> str:
+    if not handoff:
+        return ''
+    allowed_tools = handoff.get('allowed_tools', []) if isinstance(handoff.get('allowed_tools'), list) else []
+    memory_sent = handoff.get('memory_ids_sent', []) if isinstance(handoff.get('memory_ids_sent'), list) else []
+    parts = [
+        f"route={route.get('route') or route.get('name') or ''}",
+        f"task_type={handoff.get('task_type') or 'unknown'}",
+        f"request_id={handoff.get('request_id') or chat.get('request_id') or ''}",
+        f"task_package_hash={handoff.get('task_package_hash') or ''}",
+        f"allowed_tools={', '.join(str(item) for item in allowed_tools) or '-'}",
+        f"memory_sent={', '.join(str(item) for item in memory_sent) or '-'}",
+        f"redactions={handoff.get('redaction_count', 0) or 0}",
+        f"approval={handoff.get('approval_state') or '-'}",
+    ]
+    return ' | '.join(parts)
+
+
 def brain_exchange_summary(path: Path) -> dict[str, Any]:
     chat = load_json_file(path)
     request_id = str(chat.get('request_id', path.stem))
@@ -251,7 +269,7 @@ def brain_exchange_summary(path: Path) -> dict[str, Any]:
         'memory_used_ids': used_ids,
         'memory_created_ids': created_ids,
         'user_to_localbrain': compact_text(chat.get('message')),
-        'localbrain_to_cloudbrain': compact_text(chat.get('conversation_context') or route.get('memory_query') or chat.get('message')),
+        'localbrain_to_cloudbrain': compact_text(handoff_exchange_text(handoff, route, chat)),
         'cloudbrain_to_localbrain': compact_text(cloud_result.get('user_visible_answer')),
         'cloudbrain_work_summary': compact_text(cloud_result.get('work_summary')),
         'localbrain_to_user': compact_text(chat.get('response')),
